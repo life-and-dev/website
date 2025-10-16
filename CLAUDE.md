@@ -159,11 +159,24 @@ async function isDraftOnlyImage(imagePath: string): Promise<boolean> {
 ### Frontmatter-Free Markdown (2025-10-09)
 **Solution:** H1-based titles (first `# Title` becomes page title), `.draft.md` extensions for unpublished content. TOC always skips H1, shows H2-H3 only.
 
-### Menu-Based Navigation (2025-10-09)
+### Menu-Based Navigation (2025-10-09, updated 2025-10-16)
 **Implementation:** `_menu.yml` files define order (fetched from `/public/` as static files)
 - Syntax: `slug: .` (local), `slug: ./sub` (relative), `slug: /path` (absolute), `'Title': http://url` (external), `key: ---` (separator)
+- External links open in new tab with security attributes (`noopener,noreferrer`)
+- External links show open-in-new icon for visual indication
 - Unlisted files appended alphabetically by H1 title
 - Auto-synced by image watcher
+
+**External Link Support (2025-10-16):**
+```yaml
+# _menu.yml format
+'Our Father God': https://ofgod.info
+'The Kingdom': https://kingdom.ofgod.info
+```
+- Creates TreeNode with `isExternal: true` and `externalUrl` properties
+- Click handler opens link in new window instead of Vue Router navigation
+- Attached directly to parent during menu parsing (not in tree build pass)
+- Visual indicator: `mdi-open-in-new` icon appears next to title
 
 ### SEO & Tooltips (2025-10-10)
 **Features:**

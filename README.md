@@ -374,8 +374,12 @@ subdir-page: ./subdirectory
 # Absolute path (different directory)
 other-page: /other/directory/page
 
-# External link (quoted key for spaces)
+# Separator (visual divider)
+divider: ---
+
+# External link (quoted key for spaces, opens in new tab)
 'External Site': https://example.com
+'Our Father God': https://ofgod.info
 ```
 
 **Example:** `/content/kingdom/church/_menu.yml`
@@ -386,6 +390,8 @@ modifications: .    # Links to /church/modifications.md
 
 **Ordering:**
 * Menu items display in **exact order** listed in `_menu.yml`
+* External links show "open in new" icon and open in new browser tab
+* Separators display as visual dividers (non-clickable)
 * Unlisted `.md` files appear at bottom, sorted alphabetically by H1 title
 * Missing `_menu.yml` → all files sorted alphabetically
 
