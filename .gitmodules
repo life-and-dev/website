@@ -1,0 +1,15 @@
+[submodule "content/ofgod"]
+	path = content/ofgod
+	url = https://github.com/life-and-dev/ofgod.git
+[submodule "content/church"]
+	path = content/church
+	url = https://github.com/life-and-dev/church.git
+[submodule "content/kingdom"]
+	path = content/kingdom
+	url = https://github.com/life-and-dev/kingdom.git
+[submodule "content/son"]
+	path = content/son
+	url = https://github.com/life-and-dev/son.git
+[submodule "content/word"]
+	path = content/word
+	url = https://github.com/life-and-dev/word.git

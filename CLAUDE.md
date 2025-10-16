@@ -1,0 +1,607 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+# Multi-Domain Content Website - Project Documentation
+
+This is a Nuxt 4 static site generator project that converts Grav CMS content to modern Vue.js websites with **multi-domain support**.
+
+## Project Overview
+
+Migrates content from a Grav-based website (located at `../eternal`) to statically generated Nuxt 4 websites with Vuetify for UI.
+
+**Multi-Domain Architecture:** Single codebase supports multiple domains (son.ofgod.info, kingdom.ofgod.info, church.ofgod.info, ofgod.info) with environment-based content selection via `CONTENT` env var.
+
+### Key Technologies
+- **Nuxt 4** - Vue.js framework for SSG (Static Site Generation)
+- **Vue 3** - Progressive JavaScript framework
+- **Vuetify 3** - Material Design component framework
+- **@nuxt/content v3** - SQL-based content system with WASM SQLite
+- **TypeScript** - Type-safe development
+- **Chokidar v4** - File watcher for image synchronization
+
+## Architecture Decisions
+
+### Environment Variable Loading Fix (2025-10-15)
+**Problem:** `CONTENT=ofgod npm run dev` defaulted to `eternal` directory. Command-line env vars were ignored.
+
+**Root Cause:** ES module top-level code runs at import time, capturing `process.env.CONTENT` before Nuxt loads `.env` or applies command-line overrides.
+
+**Solution:** Refactored to read `process.env.CONTENT` at runtime (inside functions), not at import time:
+```typescript
+// ❌ WRONG - Captured at import time
+const contentDomain = process.env.CONTENT || 'ofgod'
+const sourceDir = path.resolve('content', contentDomain)
+
+// ✅ CORRECT - Read at runtime
+function getContentDomain(): string {
+  return process.env.CONTENT || 'ofgod'
+}
+function getSourceDir(): string {
+  return path.resolve('content', getContentDomain())
+}
+```
+
+**Changes:**
+- [scripts/watch-images.ts](scripts/watch-images.ts) - Moved env var reads into `getContentDomain()`, `getSourceDir()`, `getTargetDir()` functions
+- [content.config.ts](content.config.ts) - Added fallback: `process.env.CONTENT || 'ofgod'`
+- [.env](.env) - Updated default from `kingdom` to `ofgod`, removed non-existent `eternal` references
+
+**Result:** Command-line overrides like `CONTENT=church npm run dev` now work correctly.
+
+### BibleHub Interlinear Links (2025-10-15)
+**Problem:** Bible verse tooltips only linked to BibleGateway. Users needed access to BibleHub's interlinear translation.
+
+**Solution:** Added second link in tooltip that generates BibleHub interlinear URLs from Bible references.
+
+**Implementation:**
+```typescript
+// bible-verse-utils.ts - URL generator
+export function createBibleHubInterlinearUrl(reference: string): string {
+  const match = reference.match(/^(.+?)\s+(\d+)(?::(\d+))?(?:-(\d+))?/)
+  if (!match || !match[1] || !match[2]) return 'https://biblehub.com/interlinear/'
+
+  const [, book, chapter, verse] = match
+  const bookSlug = book.toLowerCase().replace(/\s+/g, '_')
+
+  return verse
+    ? `https://biblehub.com/interlinear/${bookSlug}/${chapter}-${verse}.htm`
+    : `https://biblehub.com/interlinear/${bookSlug}/${chapter}.htm`
+}
+```
+
+**Tooltip HTML:**
+- Added "Interlinear" link next to "Read Full Context"
+- Uses Material Design translate icon (A with character symbols)
+- Flexbox layout with `gap: 0.75rem`, wraps on mobile
+- Opens in new tab with `rel="noopener noreferrer"`
+
+**URL Format:**
+- Verse: `biblehub.com/interlinear/john/3-16.htm`
+- Chapter: `biblehub.com/interlinear/psalm/23.htm`
+- Handles spaces: `1 Corinthians` → `1_corinthians`
+
+**Testing:** 15 unit tests in [bible-verse-utils.test.ts](app/utils/bible-verse-utils.test.ts)
+
+**Result:** Users can access original Greek/Hebrew interlinear translations directly from verse tooltips.
+
+### Layout & Styling (2025-10-12 to 2025-10-13)
+**Key Decisions:**
+- **VNavigationDrawer**: Use Vuetify components with `position: fixed !important` CSS override for MD3 styling + sticky behavior
+- **Layout**: Standard page scrolling, sidebars slide in/out with `transform: translateX`, no smart-scroll complexity
+- **MD3 Inputs**: `VTextField` defaults set to `rounded="pill"` in `nuxt.config.ts` for semi-circular ends
+- **Background Colors**: Force `bg-surface-rail` on mobile expansion panels for consistency
+
+### Draft Content Exclusion System (2025-10-09)
+**Problem:** Unpublished content (`published: false`) needed to be excluded from builds/navigation but kept in repository for future publication.
+
+**Solution:** `.draft.md` file extension with intelligent image handling:
+- **Migration**: Files with `published: false` → renamed to `*.draft.md`
+- **Content Config**: `exclude: ['**/*.draft.md']` in `content.config.ts`
+- **Image Naming**: Draft page images named WITHOUT `.draft` (e.g., `constantine.draft.md` → `constantine.pic.jpg`)
+- **Image Exclusion**: Draft-only images stay in `/content/` but NOT copied to `/public/`
+
+**Implementation:**
+```typescript
+// content.config.ts
+source: {
+  exclude: ['**/*.draft.md'],  // Must be array (not string)
+  prefix: '/'  // Required for proper path generation
+}
+
+// scripts/watch-images.ts
+async function isDraftOnlyImage(imagePath: string): Promise<boolean> {
+  const prefix = fileName.split('.')[0]  // Extract page prefix
+  const hasPublished = await fs.pathExists(`${prefix}.md`)
+  const hasDraft = await fs.pathExists(`${prefix}.draft.md`)
+  return !hasPublished && hasDraft  // Skip if only draft exists
+}
+```
+
+**Result:**
+- Published content: Visible in navigation, images copied to `/public/`
+- Draft content: Excluded from builds, images stay in `/content/` only
+- Clean separation: No draft leakage to production
+
+### Image & Menu Synchronization (2025-10-08 to 2025-10-09)
+**Implementation** (`scripts/watch-images.ts`):
+- Auto-copies images and `_menu.yml` from `/content/{domain}/` to `/public/` (strips domain prefix)
+- Filters draft-only images (checks if published `{page}.md` exists)
+- Synchronous copy on startup ensures files ready before Nuxt serves requests
+- Watches for changes with 500ms stability threshold
+
+### Markdown Link Format (2025-10-08)
+**Solution:** Store links WITH `.md` in markdown files (works in VS Code), ProseA component strips `.md` at render time (works in browser).
+
+### Grav Migration (2025-10-08)
+**Script** (`scripts/migrate-grav.ts`):
+- Converts Grav pages to markdown with H1 titles
+- Smart image naming: `{page}.{image}.{ext}` (prevents duplication)
+- Generates `_menu.yml` from Grav folder numbering
+- Converts internal links to `.md` format
+- Usage: `npm run migrate -- --section=04.kingdom --domain=kingdom`
+
+### Navigation & Content System (2025-10-07)
+**Tree Navigation:**
+- Desktop 3-column (280px nav + content + 240px TOC), mobile drawer
+- Breadcrumbs (last 3 segments), auto-expanding tree, H2-H3 TOC (min 2 headings)
+- Key composables: `useBreadcrumbs`, `useNavigationTree`, `useTableOfContents`
+
+**@nuxt/content v3:**
+- SQL-based content system with WASM SQLite
+- Dynamic `cwd` via `CONTENT` env var for multi-domain support
+
+**Bible Verse Tooltips:**
+- Client-side plugin detects plain text (e.g., `John 3:16 (ESV)`)
+- Whitelist-based (66 Bible books), shorthand expansion (`John 14:16,26`)
+- Tooltip with verse text + links to BibleGateway & BibleHub interlinear
+
+### Frontmatter-Free Markdown (2025-10-09)
+**Solution:** H1-based titles (first `# Title` becomes page title), `.draft.md` extensions for unpublished content. TOC always skips H1, shows H2-H3 only.
+
+### Menu-Based Navigation (2025-10-09)
+**Implementation:** `_menu.yml` files define order (fetched from `/public/` as static files)
+- Syntax: `slug: .` (local), `slug: ./sub` (relative), `slug: /path` (absolute), `'Title': http://url` (external), `key: ---` (separator)
+- Unlisted files appended alphabetically by H1 title
+- Auto-synced by image watcher
+
+### SEO & Tooltips (2025-10-10)
+**Features:**
+- Optional `description` frontmatter → `<meta name="description">` + navigation/search tooltips
+- Responsive tooltip positioning (right on desktop, bottom on mobile)
+- Standard HTML5 SEO tags (`canonical`, `lang="en"`, `robots`)
+
+### Search Relevance Ranking (2025-10-10)
+**Scoring System:**
+- Field weights: Title (10) > Keywords (7) > Description (3) > Excerpt (1)
+- Match quality: Exact (×3) > StartsWith (×2) > Contains (×1)
+- Bonuses: Position (+2), Multi-field (+3)
+- Penalties: Path depth (-1 per level beyond root)
+
+## Usage Instructions
+
+### Setup
+```bash
+npm install
+
+# Set content domain (defaults to 'ofgod')
+export CONTENT=kingdom  # or add to .env file
+```
+
+### Development
+```bash
+npm run dev                    # Start dev server (watcher auto-starts)
+CONTENT=kingdom npm run dev    # Use specific content domain
+```
+
+### Testing
+```bash
+npm test                       # Run all unit tests
+npm test -- useSearchRelevance # Run search relevance tests
+npm test -- bible-tooltips     # Run Bible reference parsing tests
+```
+
+### Building for Production
+```bash
+# Build for specific domain
+CONTENT=son npm run generate      # → deploy to son.ofgod.info
+CONTENT=kingdom npm run generate  # → deploy to kingdom.ofgod.info
+CONTENT=church npm run generate   # → deploy to church.ofgod.info
+
+# Preview production build
+npm run preview
+```
+
+### Content Migration
+```bash
+# Migrate specific section with images
+npm run migrate -- --section=04.kingdom --domain=kingdom
+
+# Options
+npm run migrate -- --dry-run      # Preview without writing
+npm run migrate -- --test          # Migrate single page
+npm run migrate -- --limit=10      # Limit to 10 pages
+```
+
+### Git Submodules
+```bash
+# Clone with submodules
+git clone --recursive https://github.com/life-and-dev/website.git
+
+# Initialize submodules (if cloned without --recursive)
+git submodule init && git submodule update
+
+# Update all submodules to latest
+git submodule update --remote
+
+# Check submodule status
+git submodule status
+```
+
+## Production Deployment
+
+**Build per domain:**
+```bash
+CONTENT=kingdom npm run generate
+# → Copies images from /content/kingdom/ to /public/kingdom/
+# → Builds static site
+# → Deploy .output/public/ to kingdom.ofgod.info
+```
+
+**Hosting:** Any static host (Netlify, Vercel, GitHub Pages, S3+CloudFront). Pure static HTML/CSS/JS with SSR pre-rendering.
+
+**Important:** Each domain needs separate build with different `CONTENT` env var.
+
+## Project Structure
+
+```
+/root/ofgod/
+├── app/                             # Nuxt 4 app directory
+│   ├── components/
+│   │   ├── AppBar.vue              # Breadcrumbs, print, theme
+│   │   ├── AppNavigation.vue       # Tree navigation + search
+│   │   ├── AppTableOfContents.vue  # Right sidebar TOC
+│   │   └── content/
+│   │       ├── ProseA.vue            # Strips .md from links
+│   │       ├── ProseBlockquote.vue   # Custom blockquote (VCard)
+│   │       └── ProseTable.vue        # Renders tables as v-data-table
+│   ├── composables/
+│   │   ├── useBreadcrumbs.ts       # Generate breadcrumbs
+│   │   ├── useNavigationTree.ts    # Build tree from pages
+│   │   ├── useSearchRelevance.ts   # Search relevance scoring
+│   │   ├── useSiteConfig.ts        # Multi-domain canonical URLs + GitHub config
+│   │   ├── useGitHubEdit.ts        # Generate GitHub edit URLs
+│   │   ├── useTableOfContents.ts   # Extract TOC from HTML
+│   │   └── useTableParser.ts       # Parse HTML tables for v-data-table
+│   ├── pages/
+│   │   ├── index.vue               # Home (queries content)
+│   │   └── [...slug].vue           # Dynamic pages
+│   ├── plugins/
+│   │   ├── bible-tooltips.client.ts # Bible reference detection
+│   │   └── bible-tooltips.test.ts   # Unit tests
+│   ├── types/
+│   │   └── table.ts                 # Table interfaces (v-data-table)
+│   └── utils/
+│       ├── bible-verse-utils.ts     # Verse processing
+│       └── bible-book-names.ts      # 66 Bible book whitelist
+├── content/                         # Git submodules (separate repos)
+│   ├── ofgod/                       # life-and-dev/ofgod submodule
+│   ├── church/                      # life-and-dev/church submodule
+│   ├── kingdom/                     # life-and-dev/kingdom submodule
+│   ├── son/                         # life-and-dev/son submodule
+│   └── word/                        # life-and-dev/word submodule
+│       ├── _menu.yml                # Navigation menu config
+│       ├── index.md                 # Domain root page
+│       ├── page.md                  # Published page
+│       ├── draft.draft.md           # Unpublished page
+│       └── page.image.jpg           # Images co-located
+├── public/                          # Auto-generated (gitignored)
+│   ├── _menu.yml                    # Auto-copied from /content/
+│   ├── page.image.jpg               # Auto-copied from /content/
+│   └── church/
+│       ├── _menu.yml                # Subdirectory menus
+│       └── image.jpg                # Domain prefix stripped
+├── scripts/
+│   ├── migrate-grav.ts              # Grav migration (pages + images + menus)
+│   ├── copy-images.ts               # One-time copy (images + menus)
+│   └── watch-images.ts              # File watcher (images + menus)
+├── content.config.ts                # @nuxt/content multi-domain config
+└── nuxt.config.ts                   # Nuxt config with watcher hook
+```
+
+## Markdown Format
+
+**Files:** `page.md` or `page.draft.md` (unpublished)
+
+**Structure:**
+```markdown
+# Page Title
+
+First paragraph content...
+
+## Section Heading
+
+Content...
+```
+
+**Frontmatter (Optional):**
+```yaml
+---
+description: Brief page description for SEO meta tags and navigation tooltips
+---
+```
+
+**Navigation:** Controlled by `_menu.yml` files (see Menu-Based Navigation section)
+
+**Description Usage:**
+- Shows as tooltip when hovering navigation menu items (desktop: right, mobile: bottom)
+- Shows as tooltip when hovering search results
+- Included in HTML `<meta name="description">` for SEO/LLMs
+- Optional field - pages without description work normally
+
+## Troubleshooting
+
+### Content Config Issues (2025-10-09)
+**Problem:** No pages loading, navigation empty, content queries return nothing.
+
+**Root Cause:** Invalid `content.config.ts` configuration (wrong data types).
+
+**Solution:**
+```typescript
+// ❌ WRONG - exclude must be array, not string
+exclude: '**/*.draft.md'
+
+// ✅ CORRECT - array of glob patterns
+exclude: ['**/*.draft.md']
+
+// ❌ WRONG - missing prefix causes path issues
+source: { cwd: '...', include: '**/*.md' }
+
+// ✅ CORRECT - prefix required for navigation tree
+source: { cwd: '...', include: '**/*.md', prefix: '/' }
+```
+
+**Symptoms:**
+- Pages exist but don't appear in navigation
+- All pages show as top-level (no hierarchy)
+- Content queries return empty results
+
+**Fix:** Clear cache and verify config:
+```bash
+rm -rf .nuxt .output
+npm run dev
+# Check console for errors
+```
+
+### Navigation Menu Order Incorrect (2025-10-09)
+**Problem:** Navigation items displayed in alphabetical order instead of `_menu.yml` order.
+
+**Root Cause:** `_menu.yml` files not copied to `/public/` before frontend fetches them. When fetch fails, code falls back to alphabetical sorting.
+
+**Solution:** Modified `watchImages()` to synchronously copy all files BEFORE starting watcher:
+```typescript
+// scripts/watch-images.ts
+export async function watchImages() {
+  await cleanPublicDirectory()
+  await copyAllImages()  // ← Ensures files ready before Nuxt starts serving
+  // ... then start watcher with ignoreInitial: true
+}
+```
+
+**Fix:** Restart dev server to trigger synchronous copy. Files copied in order:
+1. Clean `/public/` (preserves favicon.ico, robots.txt)
+2. Copy all images and `_menu.yml` files synchronously
+3. Start watching for changes
+
+### CONTENT Environment Variable Not Working (2025-10-15)
+**Problem:** Command-line `CONTENT=domain npm run dev` defaulting to wrong directory or ignoring env var.
+
+**Root Cause:** Environment variable captured at module import time instead of runtime. ES modules run top-level code immediately when imported.
+
+**Symptoms:**
+- `CONTENT=church npm run dev` shows "📦 Copying from: /content/ofgod/" (wrong domain)
+- Watcher copying files from default domain instead of specified one
+- Content from wrong domain appearing in navigation
+
+**Solution:**
+1. Check that `.env` file doesn't conflict with command-line value
+2. Verify default is `ofgod` (not `eternal`) in [scripts/watch-images.ts](scripts/watch-images.ts#L19) and [content.config.ts](content.config.ts#L6)
+3. Restart dev server completely: `Ctrl+C` then re-run with env var
+4. Clear cache if switching domains: `rm -rf .nuxt .output`
+
+**Correct Usage:**
+```bash
+CONTENT=church npm run dev       # Sets for single command
+export CONTENT=church; npm run dev  # Sets for session
+# OR edit .env file: CONTENT=church
+```
+
+### Image Watcher Not Working
+- Check Nuxt `ready` hook in `nuxt.config.ts` (import path must be `'./scripts/watch-images'` NOT `'./scripts/watch-images.js'`)
+- Verify `CONTENT` env var is set correctly (see above)
+- Check console for "📦 Copying images and menus from:" message
+- Check console for "👀 Watching images and menus in:" message
+- Restart dev server if watcher doesn't start
+- Verify files copied: `ls /public/church/history/` should show `_menu.yml`
+
+### Images Not Appearing (404 errors)
+- **Check URL structure**: Images should be at `/church/history/image.jpg` (no domain prefix)
+- **Verify files exist**: `ls /public/church/history/` (domain prefix stripped in public)
+- **Draft images**: If page is `*.draft.md`, images WON'T copy to `/public/` (expected behavior)
+- **Dev mode**: Images auto-copied on startup. If missing, restart dev server
+- **Manual copy**: `CONTENT=kingdom npx tsx scripts/copy-images.ts`
+- **Wrong domain**: Ensure `CONTENT` env var matches (check `.env` file)
+- **Production**: Run `npm run generate` (not `npm run build` - copies images first)
+
+**Console Logs:**
+```bash
+# Published image copied:
+✓ Image added: church/history/constantine.statue.jpg
+
+# Draft image skipped:
+⊗ Skipped draft image: constantine.aqaba_church.jpg
+```
+
+### Links with .md Extensions in Generated HTML
+- **Check ProseA component**: Verify `/app/components/content/ProseA.vue` exists
+- **Rebuild required**: Run `npm run generate` after ProseA changes
+- **Test fragments**: Links like `/page.md#anchor` should render as `/page#anchor`
+- **Inspect HTML**: Check `.output/public/**/*.html` for remaining `.md` extensions
+- **Regex pattern**: ProseA uses `/\.md(#|\?|$)/` to handle fragments and query strings
+
+### Migration Issues
+- **Image naming**: Check if image name already matches page slug to avoid duplication
+- **Relative links wrong**: Ensure page path is correct in migration context
+- **Links missing .md**: Verify migration script adds `.md` to internal links
+- Check migration output for `Internal Links` and `Migrated Images` counts
+- Use `--dry-run` to preview without writing
+
+### Content Not Loading
+- Verify `CONTENT` env var matches directory in `/content/`
+- Check `/content/{domain}/` exists and has `.md` files
+- Ensure valid YAML frontmatter (title, published, navigation)
+- Clear cache: `rm -rf .nuxt .output && npm run dev`
+
+### Bible Verses Not Working
+- Verify plugin loaded: Console shows "🔗 Bible Tooltips plugin starting..."
+- Check for blue underlined text on references
+- Shorthand needs full reference first: `John 14:16,26` (not `,26` alone)
+- Run `npm test` to verify regex patterns
+- Inspect element: `data-reference` should have full expanded reference
+
+### TypeScript Errors
+- Run `npx nuxi prepare` to regenerate types
+- Clear cache: `rm -rf .nuxt .output`
+
+### Hydration Mismatches
+- Clear build cache: `rm -rf .nuxt .output && npx nuxi prepare && npm run dev`
+- Always clear cache after template changes
+- Bible tooltips scan after ContentRenderer via `watch` + `nextTick`
+
+### Theme Not Persisting
+- Use `useAppTheme` composable (not direct Vuetify manipulation)
+- Theme stored in localStorage as `theme-preference`
+
+### TOC Not Appearing on First Page Load (2025-10-12)
+**Problem:** Table of Contents (right sidebar) doesn't appear when loading the home page directly, only after navigation.
+
+**Root Cause:** Using `watch(() => route.path, ..., { immediate: true })` alone causes the watch to run during setup BEFORE template refs are available. At that moment, `contentContainer.value` is `undefined` and TOC generation fails silently.
+
+**Solution:** Both `watch` and `onMounted` are required - they serve different purposes:
+- `onMounted`: Handles initial page load (refs guaranteed available)
+- `watch`: Handles route changes during navigation (refs already available)
+
+**Implementation:**
+```typescript
+// Watch for navigation (without immediate)
+watch(() => route.path, async () => {
+  generateTOC(null)
+  await nextTick()
+  await nextTick()
+  setTimeout(() => {
+    if (contentContainer.value) generateTOC(contentContainer.value)
+  }, 100)
+})
+
+// Handle initial mount separately
+onMounted(async () => {
+  await nextTick()
+  await nextTick()
+  setTimeout(() => {
+    if (contentContainer.value) generateTOC(contentContainer.value)
+  }, 100)
+})
+```
+
+**Fix:** Never remove `onMounted` in favor of `watch` with `immediate: true` when dealing with template refs.
+
+## Coding Rules
+
+### DRY Principle (Don't Repeat Yourself) - MANDATORY
+
+**Definition:** Every piece of knowledge should have a single, unambiguous, authoritative representation within the system.
+
+**Requirements:**
+- Never duplicate code, data, logic, or configuration across multiple files
+- Establish a single source of truth for each piece of information
+- Changes should only require modification in ONE place
+
+### CSS Unit Guidelines - MANDATORY
+
+**Use `rem` units for all spacing and sizing** (padding, margin, border-radius, font-size, etc.)
+
+**Exceptions - Use `px` only for:**
+- **Sidebar widths** (e.g., `280px` for navigation drawer) - affected by screen width breakpoints
+- **Border widths** (e.g., `1px` borders)
+- **z-index values** (dimensionless)
+
+**Rationale:**
+- `rem` units scale with user font preferences (accessibility)
+- Maintains consistent spacing across different screen sizes
+- Prevents visual issues like backgrounds leaking outside rounded borders
+
+**Conversion Reference:**
+```css
+/* Default: 1rem = 16px */
+0.25rem = 4px   /* Small spacing */
+0.5rem  = 8px   /* Medium spacing */
+0.75rem = 12px  /* Large spacing */
+1rem    = 16px  /* Standard spacing */
+1.5rem  = 24px  /* Extra large */
+1.75rem = 28px  /* Pill border radius */
+```
+
+**Examples:**
+```css
+/* ✅ CORRECT - Use rem */
+.search-box {
+  padding: 0.75rem;
+  border-radius: 1.75rem;
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* ❌ WRONG - Don't use px for spacing */
+.search-box {
+  padding: 12px;
+  border-radius: 28px;
+  margin-top: 8px;
+}
+
+/* ✅ CORRECT - Sidebar width uses px */
+.v-navigation-drawer {
+  width: 280px;
+}
+
+/* ✅ CORRECT - Border width uses px */
+.card {
+  border: 1px solid;
+}
+```
+
+### Empty Types
+
+- Use `undefined` for uninitialized fields
+- Use `null` for deliberately empty initialized fields
+- Use `''` (empty string) only for text fields where a value is always expected
+
+### Enums
+
+Never use TypeScript enums or union types (except Discriminated Unions). Prefer Const Assertions:
+
+```ts
+export const Status = {
+  A_VALUE: 'A_VALUE',
+  NEXT_VALUE: 'NEXT_VALUE',
+} as const;
+export type StatusEnum = keyof typeof Status;
+```
+
+Naming: UPPER_SNAKE_CASE for keys/values, PascalCase for type name.
+
+### File Naming Convention
+
+- kebab-case for URL/route files
+- PascalCase for Vue components and models
+- camelCase for other files
+- Special extensions: `.config.ts`, `.d.ts`, `.schema.ts`, `.test.ts`
