@@ -42,4 +42,3 @@ logs
 !/public/favicon.ico
 !/public/robots.txt
 .claude/last-spoken.txt
-.claude/last-spoken.txt

@@ -37,19 +37,5 @@ useHead(() => ({
 }))
 
 // Trigger Bible tooltips scan after content renders
-const { $bibleTooltips } = useNuxtApp()
-
-onMounted(() => {
-  // Initial scan
-  if (page.value) {
-    nextTick(() => $bibleTooltips.scan())
-  }
-
-  // Re-scan when content changes
-  watch(() => page.value, (newPage) => {
-    if (newPage) {
-      nextTick(() => $bibleTooltips.scan())
-    }
-  })
-})
+useBibleTooltips(page)
 </script>

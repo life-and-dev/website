@@ -172,49 +172,35 @@ function handleMobileSelection(path?: string) {
 }
 
 /**
- * Generate TOC when route changes (navigation)
+ * Helper function to regenerate TOC after content rendering
+ * Waits for ContentRenderer to finish and DOM to update
  */
-watch(() => route.path, async () => {
-  // Clear TOC immediately when route changes
+async function regenerateTOC(delay = 100) {
+  // Clear existing TOC
   generateTOC(null)
 
-  // Wait for content to render (double nextTick for ContentRenderer)
+  // Wait for ContentRenderer to finish rendering (double nextTick required)
   await nextTick()
   await nextTick()
 
-  // Increased delay to ensure v-main structure is fully rendered
+  // Small delay to ensure DOM is fully updated
   setTimeout(() => {
     if (contentContainer.value) {
       generateTOC(contentContainer.value)
     }
-  }, 200)
-})
+  }, delay)
+}
+
+/**
+ * Generate TOC when route changes (navigation)
+ */
+watch(() => route.path, () => regenerateTOC(200))
 
 /**
  * Generate TOC on initial mount
  * Separate from watch to ensure refs are available
  */
-onMounted(async () => {
-  // Wait for content to render (ContentRenderer needs time)
-  await nextTick()
-  await nextTick()
-  await nextTick()
-
-  // Immediate attempt
-  if (contentContainer.value) {
-    generateTOC(contentContainer.value)
-  }
-
-  // Multiple delayed attempts with increasing delays (for slow ContentRenderer)
-  const delays = [100, 300, 600, 1000]
-  delays.forEach((delay) => {
-    setTimeout(() => {
-      if (contentContainer.value) {
-        generateTOC(contentContainer.value)
-      }
-    }, delay)
-  })
-})
+onMounted(() => regenerateTOC(100))
 </script>
 
 <style>
