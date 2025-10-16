@@ -158,11 +158,6 @@ async function buildTreeFromPages(pages: any[]): Promise<TreeNode> {
     }
 
     nodeMap.set(path, node)
-
-    // Debug: Log first few nodes
-    if (import.meta.dev && nodeMap.size <= 5) {
-      console.log(`[Tree] Created node: id="${id}", path="${path}", title="${title}"`)
-    }
   }
 
   // Second pass: read menu.yml files and update order (also creates external nodes and separators)
@@ -194,17 +189,6 @@ async function buildTreeFromPages(pages: any[]): Promise<TreeNode> {
 
   // Sort children by order
   sortTreeChildren(root)
-
-  // Debug: Log root children order
-  if (import.meta.dev) {
-    console.log('[Tree] Root children after sorting:', root.children.map(n => ({
-      title: n.title,
-      order: n.order,
-      isSeparator: n.isSeparator,
-      isExternal: n.isExternal,
-      externalUrl: n.externalUrl
-    })))
-  }
 
   return root
 }
@@ -252,20 +236,12 @@ async function applyMenuOrdering(nodeMap: Map<string, TreeNode>, root: TreeNode)
         const menuLines = menuContent.split('\n').filter(line => line.trim() && !line.trim().startsWith('#'))
         let order = 0
 
-        if (import.meta.dev && dirPath === '/') {
-          console.log(`[Menu] Parsing ${menuLines.length} lines from _menu.yml`)
-        }
-
         for (const line of menuLines) {
           const colonIndex = line.indexOf(':')
           if (colonIndex === -1) continue
 
           const key = line.substring(0, colonIndex).trim().replace(/^['"]|['"]$/g, '')
           const value = line.substring(colonIndex + 1).trim().replace(/^['"]|['"]$/g, '')
-
-          if (import.meta.dev && dirPath === '/') {
-            console.log(`[Menu] Parsing line - key: "${key}", value: "${value}"`)
-          }
 
           let node: TreeNode | undefined
 
@@ -287,9 +263,6 @@ async function applyMenuOrdering(nodeMap: Map<string, TreeNode>, root: TreeNode)
             nodeMap.set(separatorPath, node)
             parent.children.push(node)
             orderedNodes.add(node)
-            if (import.meta.dev) {
-              console.log(`[Menu] Created separator: id="${node.id}", path="${separatorPath}", order=${node.order}`)
-            }
             continue
           } else if (value.startsWith('http://') || value.startsWith('https://')) {
             // External URL - create new node
@@ -307,10 +280,6 @@ async function applyMenuOrdering(nodeMap: Map<string, TreeNode>, root: TreeNode)
             nodeMap.set(value, node)
             parent.children.push(node)
             orderedNodes.add(node)
-            if (import.meta.dev) {
-              console.log(`[Menu] Created external link: id="${node.id}", title="${node.title}", url="${value}", order=${node.order}, parent="${parent.path}"`)
-              console.log(`[Menu] Parent has ${parent.children.length} children after adding external link`)
-            }
             continue
           } else if (value.startsWith('/')) {
             // Absolute path
@@ -321,12 +290,6 @@ async function applyMenuOrdering(nodeMap: Map<string, TreeNode>, root: TreeNode)
               ? (dirPath === '/' ? `/${key}` : `${dirPath}/${key}`)
               : (dirPath === '/' ? `/${value.substring(2)}` : `${dirPath}/${value.substring(2)}`)
             node = nodeMap.get(resolvedPath)
-
-            // Debug: Log resolution attempts
-            if (!node && import.meta.dev) {
-              console.log(`[Menu] Failed to find node for "${key}": tried path "${resolvedPath}", dirPath="${dirPath}"`)
-              console.log(`[Menu] Available paths in nodeMap:`, Array.from(nodeMap.keys()).filter(p => p.includes(key)))
-            }
           } else if (!value || value === key) {
             // Legacy format or empty value: slug.md in same directory
             node = nodes.find(n => n.id === key || n.path.endsWith(`/${key}`))
@@ -335,19 +298,8 @@ async function applyMenuOrdering(nodeMap: Map<string, TreeNode>, root: TreeNode)
           if (node) {
             node.order = order++
             orderedNodes.add(node)
-            if (import.meta.dev) {
-              console.log(`[Menu] Set order ${node.order} for "${node.title}" (id: ${node.id})`)
-            }
-          } else if (import.meta.dev) {
-            console.warn(`[Menu] Could not resolve menu entry: ${key}: ${value}`)
           }
         }
-      }
-
-      // Debug: Log all nodes in this directory
-      if (import.meta.dev && dirPath === '/') {
-        console.log(`[Menu] Nodes in "${dirPath}":`, nodes.map(n => ({ title: n.title, order: n.order, isSeparator: n.isSeparator })))
-        console.log(`[Menu] Ordered nodes:`, Array.from(orderedNodes).map(n => ({ title: n.title, order: n.order, isSeparator: n.isSeparator })))
       }
 
       // Add unlisted nodes alphabetically at the end

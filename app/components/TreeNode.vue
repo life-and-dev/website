@@ -109,11 +109,6 @@ const hasChildren = computed(() => props.node.children && props.node.children.le
 const isExpanded = computed(() => props.expandedIds.has(props.node.id))
 const isActive = computed(() => props.node.path === props.activePath)
 
-// Debug: Log separator nodes
-if (import.meta.dev && props.node.isSeparator) {
-  console.log('[TreeNode] Rendering separator:', props.node)
-}
-
 // Shared tooltip configuration
 const tooltip = useTooltipConfig()
 
