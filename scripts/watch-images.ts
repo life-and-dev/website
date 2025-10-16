@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg']
-const STATIC_FILES = ['favicon.ico', 'robots.txt']
+const STATIC_FILES = ['favicon.ico', 'robots.txt', '_redirects']
 const MENU_FILE = '_menu.yml'
 
 /**

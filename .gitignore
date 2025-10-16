@@ -41,6 +41,7 @@ logs
 # Keep static assets
 !/public/favicon.ico
 !/public/robots.txt
+!/public/_redirects
 
 # Temporary Claude script files
 /.claude/last-spoken.txt
