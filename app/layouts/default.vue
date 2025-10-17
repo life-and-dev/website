@@ -124,8 +124,13 @@ const desktopContentContainer = ref<HTMLElement>()
 const mobileContentContainer = ref<HTMLElement>()
 const { tocItems, activeId: activeHeadingId, shouldShowTOC, generateTOC } = useTableOfContents()
 
-// Computed ref that returns the correct container based on screen size
-const contentContainer = computed(() => mdAndUp.value ? desktopContentContainer.value : mobileContentContainer.value)
+// Provide TOC generation function to child pages
+provide('generateTOC', () => {
+  const container = mdAndUp.value ? desktopContentContainer.value : mobileContentContainer.value
+  if (container) {
+    generateTOC(container)
+  }
+})
 
 // Sidebar state - initialize based on screen size
 const sidebarsVisible = ref(mdAndUp.value)
@@ -172,35 +177,12 @@ function handleMobileSelection(path?: string) {
 }
 
 /**
- * Helper function to regenerate TOC after content rendering
- * Waits for ContentRenderer to finish and DOM to update
+ * Clear TOC when navigating to a new page
+ * The page components will regenerate it when ContentRenderer emits @vue:mounted
  */
-async function regenerateTOC(delay = 100) {
-  // Clear existing TOC
+watch(() => route.path, () => {
   generateTOC(null)
-
-  // Wait for ContentRenderer to finish rendering (double nextTick required)
-  await nextTick()
-  await nextTick()
-
-  // Small delay to ensure DOM is fully updated
-  setTimeout(() => {
-    if (contentContainer.value) {
-      generateTOC(contentContainer.value)
-    }
-  }, delay)
-}
-
-/**
- * Generate TOC when route changes (navigation)
- */
-watch(() => route.path, () => regenerateTOC(200))
-
-/**
- * Generate TOC on initial mount
- * Separate from watch to ensure refs are available
- */
-onMounted(() => regenerateTOC(100))
+})
 </script>
 
 <style>

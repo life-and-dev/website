@@ -8,7 +8,11 @@
     </div>
     <div v-else>
       <div class="content-body">
-        <ContentRenderer :value="page" />
+        <ContentRenderer
+          :value="page"
+          @vue:mounted="handleContentRendered"
+          @vue:updated="handleContentRendered"
+        />
       </div>
     </div>
   </article>
@@ -38,6 +42,17 @@ useHead(() => ({
     { rel: 'canonical', href: `${siteConfig.canonicalBase}${route.path}` }
   ]
 }))
+
+// Inject TOC generation function from layout
+const layoutGenerateTOC = inject<() => void>('generateTOC')
+
+// Handle ContentRenderer lifecycle events
+function handleContentRendered() {
+  // ContentRenderer has finished rendering, generate TOC
+  if (layoutGenerateTOC) {
+    layoutGenerateTOC()
+  }
+}
 
 // Trigger Bible tooltips scan after content renders
 useBibleTooltips(page)
