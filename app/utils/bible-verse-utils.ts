@@ -1,18 +1,20 @@
 /**
- * Shared utility functions for Bible verse handling
+ * Shared utility functions for Bible verse handling with Bolls.life API
  */
 
-interface BibleApiResponse {
-  verses?: Array<{ text: string }>
-  text?: string
-  translation_id?: string
-  translation_name?: string
+/**
+ * Bolls.life API response format for single verse
+ */
+interface BollsVerseResponse {
+  pk: number
+  verse: number
+  text: string
+  comment?: string  // HTML cross-references
 }
 
 export interface ProcessedBibleVerse {
   text: string
   translation: string
-  requestedTranslation?: string  // Original requested translation (if different from actual)
 }
 
 export interface ParsedReference {
@@ -20,70 +22,89 @@ export interface ParsedReference {
   translation: string  // Translation code (e.g., "ESV", defaults to "ESV")
 }
 
-export interface MappedTranslation {
-  code: string  // Actual translation code to use with API
-  requested: string  // Original requested translation
-  isFallback: boolean  // True if using fallback translation
+/**
+ * Standard Bible book numbering (1-66)
+ * Used by Bolls.life API
+ */
+const BOOK_NUMBERS: Record<string, number> = {
+  // Old Testament (1-39)
+  'genesis': 1, 'gen': 1,
+  'exodus': 2, 'exo': 2, 'exod': 2,
+  'leviticus': 3, 'lev': 3,
+  'numbers': 4, 'num': 4,
+  'deuteronomy': 5, 'deut': 5, 'deu': 5,
+  'joshua': 6, 'josh': 6, 'jos': 6,
+  'judges': 7, 'judg': 7, 'jdg': 7,
+  'ruth': 8, 'rut': 8,
+  '1 samuel': 9, '1samuel': 9, '1sam': 9, '1sa': 9, 'i samuel': 9,
+  '2 samuel': 10, '2samuel': 10, '2sam': 10, '2sa': 10, 'ii samuel': 10,
+  '1 kings': 11, '1kings': 11, '1kgs': 11, '1ki': 11, 'i kings': 11,
+  '2 kings': 12, '2kings': 12, '2kgs': 12, '2ki': 12, 'ii kings': 12,
+  '1 chronicles': 13, '1chronicles': 13, '1chr': 13, '1ch': 13, 'i chronicles': 13,
+  '2 chronicles': 14, '2chronicles': 14, '2chr': 14, '2ch': 14, 'ii chronicles': 14,
+  'ezra': 15, 'ezr': 15,
+  'nehemiah': 16, 'neh': 16,
+  'esther': 17, 'est': 17, 'esth': 17,
+  'job': 18,
+  'psalm': 19, 'psalms': 19, 'psa': 19, 'ps': 19,
+  'proverbs': 20, 'prov': 20, 'pro': 20,
+  'ecclesiastes': 21, 'eccl': 21, 'ecc': 21, 'eccles': 21,
+  'song of solomon': 22, 'song': 22, 'sos': 22, 'song of songs': 22,
+  'isaiah': 23, 'isa': 23,
+  'jeremiah': 24, 'jer': 24,
+  'lamentations': 25, 'lam': 25,
+  'ezekiel': 26, 'ezek': 26, 'eze': 26,
+  'daniel': 27, 'dan': 27,
+  'hosea': 28, 'hos': 28,
+  'joel': 29, 'joe': 29,
+  'amos': 30, 'amo': 30,
+  'obadiah': 31, 'obad': 31, 'oba': 31,
+  'jonah': 32, 'jon': 32,
+  'micah': 33, 'mic': 33,
+  'nahum': 34, 'nah': 34, 'nam': 34,
+  'habakkuk': 35, 'hab': 35,
+  'zephaniah': 36, 'zeph': 36, 'zep': 36,
+  'haggai': 37, 'hag': 37,
+  'zechariah': 38, 'zech': 38, 'zec': 38,
+  'malachi': 39, 'mal': 39,
+  // New Testament (40-66)
+  'matthew': 40, 'matt': 40, 'mat': 40, 'mt': 40,
+  'mark': 41, 'mar': 41, 'mk': 41, 'mrk': 41,
+  'luke': 42, 'luk': 42, 'lk': 42,
+  'john': 43, 'joh': 43, 'jn': 43,
+  'acts': 44, 'act': 44,
+  'romans': 45, 'rom': 45, 'rm': 45,
+  '1 corinthians': 46, '1corinthians': 46, '1cor': 46, '1co': 46, 'i corinthians': 46,
+  '2 corinthians': 47, '2corinthians': 47, '2cor': 47, '2co': 47, 'ii corinthians': 47,
+  'galatians': 48, 'gal': 48,
+  'ephesians': 49, 'eph': 49,
+  'philippians': 50, 'phil': 50, 'php': 50,
+  'colossians': 51, 'col': 51,
+  '1 thessalonians': 52, '1thessalonians': 52, '1thess': 52, '1th': 52, 'i thessalonians': 52,
+  '2 thessalonians': 53, '2thessalonians': 53, '2thess': 53, '2th': 53, 'ii thessalonians': 53,
+  '1 timothy': 54, '1timothy': 54, '1tim': 54, '1ti': 54, 'i timothy': 54,
+  '2 timothy': 55, '2timothy': 55, '2tim': 55, '2ti': 55, 'ii timothy': 55,
+  'titus': 56, 'tit': 56,
+  'philemon': 57, 'philem': 57, 'phm': 57,
+  'hebrews': 58, 'heb': 58,
+  'james': 59, 'jas': 59, 'jam': 59,
+  '1 peter': 60, '1peter': 60, '1pet': 60, '1pe': 60, 'i peter': 60,
+  '2 peter': 61, '2peter': 61, '2pet': 61, '2pe': 61, 'ii peter': 61,
+  '1 john': 62, '1john': 62, '1jn': 62, 'i john': 62,
+  '2 john': 63, '2john': 63, '2jn': 63, 'ii john': 63,
+  '3 john': 64, '3john': 64, '3jn': 63, 'iii john': 64,
+  'jude': 65, 'jud': 65,
+  'revelation': 66, 'rev': 66,
 }
 
 /**
- * Translations supported by bible-api.com
- * See: https://bible-api.com/
+ * Get standard book number (1-66) from book name
+ * @param bookName - Bible book name (case-insensitive)
+ * @returns Book number or null if not found
  */
-const SUPPORTED_TRANSLATIONS = [
-  'web',      // World English Bible (default)
-  'kjv',      // King James Version
-  'asv',      // American Standard Version (1901)
-  'bbe',      // Bible in Basic English
-  'darby',    // Darby Translation
-  'dra',      // Douay-Rheims American Edition
-  'ylt',      // Young's Literal Translation
-  'oeb-us',   // Open English Bible, US Edition
-  'oeb-cw',   // Open English Bible, Commonwealth Edition
-  'webbe',    // World English Bible, British Edition
-  'cherokee', // Cherokee New Testament
-  'cuv',      // Chinese Union Version
-  'bkr',      // Czech Bible Kralická
-  'clementine', // Latin Clementine Vulgate
-  'almeida',  // Portuguese João Ferreira de Almeida
-  'rccv'      // Romanian Cornilescu
-] as const
-
-/**
- * Map requested translation to supported translation
- * @param requested - Requested translation code (case-insensitive)
- * @returns Mapped translation info
- */
-export function mapTranslation(requested: string): MappedTranslation {
-  const normalized = requested.toLowerCase()
-
-  // Check if directly supported
-  if (SUPPORTED_TRANSLATIONS.includes(normalized as any)) {
-    return {
-      code: normalized,
-      requested,
-      isFallback: false
-    }
-  }
-
-  // Apply fallback mapping
-  const fallbackMap: Record<string, string> = {
-    'esv': 'kjv',    // ESV → KJV (both formal equivalence)
-    'nkjv': 'kjv',   // NKJV → KJV (NKJV is modernized KJV)
-    'nasb': 'asv',   // NASB → ASV (both literal American)
-    'niv': 'web',    // NIV → WEB (both dynamic equivalence)
-    'nlt': 'web',    // NLT → WEB (both dynamic equivalence)
-    'nrsv': 'web',   // NRSV → WEB (modern English)
-    'amp': 'web',    // AMP → WEB (readable modern)
-  }
-
-  const fallbackCode = fallbackMap[normalized] || 'web'
-
-  return {
-    code: fallbackCode,
-    requested,
-    isFallback: true
-  }
+export function getBookNumber(bookName: string): number | null {
+  const normalized = bookName.toLowerCase().trim()
+  return BOOK_NUMBERS[normalized] ?? null
 }
 
 /**
@@ -112,43 +133,71 @@ export function parseReference(fullReference: string): ParsedReference {
 const MAX_VERSES = 4
 
 /**
- * Process Bible API response and truncate to first 4 verses if needed
- * @param data - Response from bible-api.com
- * @param _reference - Optional reference string (reserved for future use)
- * @param requestedTranslation - Optional originally requested translation (if different from actual)
- * @returns Processed verse text with translation and ellipsis if truncated
+ * Strip HTML tags from text, preserving content
+ * @param html - HTML string
+ * @returns Plain text
  */
-export function processBibleVerseText(data: BibleApiResponse, _reference?: string, requestedTranslation?: string): ProcessedBibleVerse {
-  let text = ''
-  let wasTruncated = false
+function stripHtml(html: string): string {
+  return html
+    .replace(/<S>\d+<\/S>/g, '')  // Remove Strong's numbers
+    .replace(/<i>(.*?)<\/i>/g, '$1')  // Keep italicized content
+    .replace(/<a[^>]*>(.*?)<\/a>/g, '$1')  // Keep link text
+    .replace(/<[^>]+>/g, '')  // Remove all other tags
+    .replace(/\s+/g, ' ')  // Normalize whitespace
+    .trim()
+}
 
-  // Check if we have verses array (preferred)
-  if (data.verses && Array.isArray(data.verses) && data.verses.length > 0) {
-    const totalVerses = data.verses.length
-    const limitedVerses = data.verses.slice(0, MAX_VERSES)
+/**
+ * Process Bolls.life API response for single verse
+ * @param data - Response from Bolls.life API
+ * @param translation - Translation code
+ * @returns Processed verse with stripped HTML
+ */
+export function processBollsVerse(data: BollsVerseResponse, translation: string): ProcessedBibleVerse {
+  const text = stripHtml(data.text)
 
-    // Join verses with space
-    text = limitedVerses.map((v) => v.text || '').join(' ')
+  return {
+    text,
+    translation: translation.toUpperCase()
+  }
+}
 
-    wasTruncated = totalVerses > MAX_VERSES
-  } else if (data.text) {
-    // Fallback to .text field if verses array not available
-    text = data.text
+/**
+ * Process Bolls.life API response for verse range
+ * @param data - Array of verses from Bolls.life API
+ * @param translation - Translation code
+ * @param startVerse - Starting verse number (optional, for range filtering)
+ * @param endVerse - Ending verse number (optional, for range filtering)
+ * @returns Processed verses with truncation if needed
+ */
+export function processBollsVerseRange(
+  data: BollsVerseResponse[],
+  translation: string,
+  startVerse?: number,
+  endVerse?: number
+): ProcessedBibleVerse {
+  let verses = data
+
+  // Filter to verse range if specified
+  if (startVerse !== undefined) {
+    const end = endVerse ?? startVerse
+    verses = data.filter(v => v.verse >= startVerse && v.verse <= end)
   }
 
-  // Clean up the text (remove extra whitespace)
-  const cleanText = text.trim().replace(/\s+/g, ' ')
+  // Truncate to first 4 verses if needed
+  const wasTruncated = verses.length > MAX_VERSES
+  const limitedVerses = verses.slice(0, MAX_VERSES)
 
-  // Add ellipsis if we truncated verses
-  const finalText = wasTruncated ? cleanText + ' ...' : cleanText
+  // Join and strip HTML
+  const text = limitedVerses
+    .map(v => stripHtml(v.text))
+    .join(' ')
 
-  // Extract translation (bible-api.com returns translation_id like "kjv", "web", etc.)
-  const translation = (data.translation_id || data.translation_name || 'KJV').toUpperCase()
+  const finalText = wasTruncated ? text + ' ...' : text
 
   return {
     text: finalText,
-    translation,
-    requestedTranslation: requestedTranslation ? requestedTranslation.toUpperCase() : undefined
+    translation: translation.toUpperCase()
   }
 }
 

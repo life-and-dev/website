@@ -33,16 +33,7 @@ Migrates content from a Grav-based website (located at `../eternal`) to statical
 ```typescript
 // nuxt.config.ts
 nitro: {
-  preset: 'static',  // Pure static preset - no SPA fallbacks
-  prerender: {
-    routes: [
-      '/',
-      '/about',
-      '/disclaimer',
-      '/downloads',
-      '/edit'
-    ]
-  }
+  preset: 'static'  // Pure static preset - no SPA fallbacks
 }
 ```
 
@@ -286,50 +277,103 @@ export function useContentPostProcessing(pageRef: Ref<any>) {
 
 **Result:** TOC appears reliably on both initial load and navigation.
 
-### Bible API Translation Support (2025-10-17)
-**Problem:** Bible verse tooltips showed 404 errors. Users requested ESV and NKJV translations, but bible-api.com has limited translation support.
+### Bolls.life Bible API Integration (2025-10-17)
+**Problem:** Users requested ESV and NKJV translation support for Bible verse tooltips. Initial attempt used bible-api.com which lacks these copyrighted translations.
 
-**Root Cause:** bible-api.com only supports 18 translations (web, kjv, asv, bbe, darby, dra, ylt, oeb-us, oeb-cw, webbe, cherokee, cuv, bkr, clementine, almeida, rccv). ESV and NKJV are copyrighted translations not available in most free APIs.
+**Solution:** Migrated to Bolls.life API which provides 100+ translations including ESV and NKJV at no cost.
 
-**Solution:** Intelligent translation fallback system with transparent user feedback.
-
-**Translation Mapping Strategy:**
+**API Format:**
+Bolls.life requires **standard book numbering (1-66)** instead of book names:
 ```typescript
-// app/utils/bible-verse-utils.ts
-const fallbackMap: Record<string, string> = {
-  'esv': 'kjv',    // ESV → KJV (both formal equivalence)
-  'nkjv': 'kjv',   // NKJV → KJV (NKJV is modernized KJV)
-  'nasb': 'asv',   // NASB → ASV (both literal American)
-  'niv': 'web',    // NIV → WEB (both dynamic equivalence)
-  'nlt': 'web',    // NLT → WEB (both dynamic equivalence)
-  'nrsv': 'web',   // NRSV → WEB (modern English)
-  'amp': 'web',    // AMP → WEB (readable modern)
-}
+// Single verse: https://bolls.life/get-verse/{TRANSLATION}/{BOOK}/{CHAPTER}/{VERSE}/
+https://bolls.life/get-verse/ESV/43/3/16/  // John 3:16 (ESV)
+
+// Verse range: Fetch chapter, filter verses
+https://bolls.life/get-text/NKJV/43/3/  // John chapter 3 → filter verses 16-18
+```
+
+**Book Number Mapping:**
+```typescript
+// app/utils/bible-verse-utils.ts - getBookNumber()
+Genesis=1, Exodus=2, ... John=43, Romans=45, ... Revelation=66
+
+// Supports abbreviations:
+'john' → 43, 'jn' → 43, 'joh' → 43
+'1 corinthians' → 46, '1cor' → 46, '1co' → 46
 ```
 
 **Implementation:**
-- [bible-verse-utils.ts](app/utils/bible-verse-utils.ts) - Added `mapTranslation()` function and `SUPPORTED_TRANSLATIONS` list
-- [bible-tooltips.client.ts](app/plugins/bible-tooltips.client.ts#L56-L62) - Applies translation mapping before API call: `?translation=kjv`
-- Tooltip displays fallback info: `John 3:16 (KJV • ESV unavailable)` when using fallback
+- [bible-verse-utils.ts](app/utils/bible-verse-utils.ts) - Added `getBookNumber()`, `processBollsVerse()`, `processBollsVerseRange()`
+- [bible-tooltips.client.ts](app/plugins/bible-tooltips.client.ts#L54-L128) - Parse reference → book number → Bolls.life API
+- HTML stripping: Removes `<S>` Strong's numbers, `<a>` cross-references, preserves `<i>` italic text
+
+**Response Format:**
+```json
+{
+  "pk": 1958205,
+  "verse": 16,
+  "text": "For God so loved the world, <i>that</i> he gave his only Son...",
+  "comment": "<a href='/ESV/45/5/8'>Rom. 5:8</a>..."
+}
+```
+
+**Features:**
+- ✅ **ESV, NKJV, KJV, YLT, WEB** and 100+ translations
+- ✅ **Verse ranges** - `John 3:16-18` fetches chapter, filters verses 16-18
+- ✅ **No authentication** - Free, CORS-enabled
+- ✅ **No rate limits** - No documented restrictions
+- ✅ **HTML handling** - Strips tags for clean tooltip display
 
 **User Experience:**
-- Requested: `John 3:16 (ESV)` → Displays: `John 3:16 (KJV • ESV unavailable)`
-- Requested: `John 3:16 (NKJV)` → Displays: `John 3:16 (KJV • NKJV unavailable)`
-- Requested: `John 3:16 (KJV)` → Displays: `John 3:16 (KJV)` (no fallback notice)
-- No translation specified → Defaults to ESV, falls back to KJV with notice
+- Requested: `John 3:16 (ESV)` → Displays: `John 3:16 (ESV)` with actual ESV text ✅
+- Requested: `Romans 8:28 (NKJV)` → Displays: `Romans 8:28 (NKJV)` with NKJV text ✅
+- Requested: `Psalm 23:1-3 (KJV)` → Displays: `Psalm 23:1-3 (KJV)` with verses 1-3 ✅
+- No translation specified → Defaults to ESV ✅
 
-**API Details:**
-- Endpoint: `https://bible-api.com/{reference}?translation={code}`
-- Rate limit: 15 requests per 30 seconds (IP-based)
-- CORS: Enabled for client-side requests
-- Documentation: https://bible-api.com/
+**Documentation:** https://bolls.life/api/
 
-**Alternative Considered (Not Implemented):**
-- API.Bible (scripture.api.bible) - Has 2500+ translations including ESV/NKJV
-- Rejected because: Requires API key, daily quotas (5000/day), more complex implementation
-- May revisit if free tier proves insufficient
+**Result:** Full ESV and NKJV support without fallbacks. Users get requested translations directly.
 
-**Result:** Users get verse text in closest available translation with transparent fallback notifications. No 404 errors.
+### Bible Tooltips CSS Extraction (2025-10-17)
+**Problem:** Bible tooltip styles were embedded as inline styles in the plugin JavaScript, making them harder to maintain and violating the DRY principle.
+
+**Solution:** Extracted all CSS to dedicated stylesheet [app/assets/css/bible-tooltips.css](app/assets/css/bible-tooltips.css).
+
+**Implementation:**
+- Created CSS file with classes: `.bible-tooltip`, `.bible-tooltip-overlay`, `.bible-tooltip-title`, `.bible-tooltip-translation`, `.bible-tooltip-text`, `.bible-tooltip-footer`, `.bible-tooltip-link`, `.bible-tooltip-icon`, `.bible-ref`
+- Updated [bible-tooltips.client.ts](app/plugins/bible-tooltips.client.ts) to use CSS classes instead of inline styles
+- Added CSS file to [nuxt.config.ts](nuxt.config.ts) `css` array for global loading
+- Retained only dynamic inline styles for positioning (`left`, `top`) and visibility (`display`)
+
+**CSS Structure:**
+```css
+/* Overlay - covers entire viewport when tooltip is locked */
+.bible-tooltip-overlay { position: fixed; z-index: 9999; ... }
+
+/* Tooltip container - uses theme CSS variables */
+.bible-tooltip {
+  background: rgb(var(--v-theme-surface-appbar));
+  color: rgb(var(--v-theme-on-surface));
+  ...
+}
+
+/* Semantic classes for content sections */
+.bible-tooltip-title { font-weight: 600; ... }
+.bible-tooltip-translation { color: rgb(var(--v-theme-secondary)); ... }
+.bible-tooltip-footer { border-top: 1px solid rgb(var(--v-theme-outline)); ... }
+
+/* Bible reference spans in content */
+.bible-ref { color: rgb(var(--v-theme-primary)); text-decoration: underline; ... }
+```
+
+**Benefits:**
+- Single source of truth for tooltip styling
+- Easier to maintain and customize
+- Better separation of concerns (structure vs. presentation)
+- Theme variables properly referenced in CSS
+- Reduced JavaScript bundle size
+
+**Result:** Clean separation between static styles (CSS) and dynamic positioning (JavaScript).
 
 ## Usage Instructions
 

@@ -35,9 +35,14 @@
     line-height: 1.5;
   }
 
+  /* Force all text to pure black */
+  * {
+    color: black !important;
+  }
+
   /* Render links as plain text */
   a {
-    color: inherit !important;
+    color: black !important;
     text-decoration: none !important;
   }
 

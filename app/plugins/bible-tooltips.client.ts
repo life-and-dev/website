@@ -1,5 +1,12 @@
-// Custom Bible Verse Tooltip Plugin using Bible-API.com
-import { processBibleVerseText, createBibleHubInterlinearUrl, parseReference, mapTranslation, type ProcessedBibleVerse } from '~/utils/bible-verse-utils'
+// Custom Bible Verse Tooltip Plugin using Bolls.life API
+import {
+  processBollsVerse,
+  processBollsVerseRange,
+  createBibleHubInterlinearUrl,
+  parseReference,
+  getBookNumber,
+  type ProcessedBibleVerse
+} from '~/utils/bible-verse-utils'
 import { createBibleReferencePatterns } from '~/utils/bible-book-names'
 
 export default defineNuxtPlugin((nuxtApp) => {
@@ -50,32 +57,66 @@ export default defineNuxtPlugin((nuxtApp) => {
       }
 
       // Parse reference to extract translation (defaults to ESV)
-      const { reference, translation: requestedTranslation } = parseReference(fullReference)
-
-      // Map requested translation to supported translation
-      const { code: apiTranslation, isFallback } = mapTranslation(requestedTranslation)
+      const { reference, translation } = parseReference(fullReference)
 
       try {
-        // Using bible-api.com which supports 18 translations
-        // Format: https://bible-api.com/John+3:16?translation=kjv
-        // See: https://bible-api.com/ for supported translations
-        const url = `https://bible-api.com/${encodeURIComponent(reference)}?translation=${apiTranslation}`
-        const response = await fetch(url)
-        if (!response.ok) {
-          throw new Error(`API request failed with status ${response.status}`)
+        // Parse the reference: "John 3:16" or "John 3:16-18"
+        const match = reference.match(/^(.+?)\s+(\d+):(\d+)(?:-(\d+))?/)
+
+        if (!match) {
+          throw new Error(`Invalid reference format: ${reference}`)
         }
 
-        const data = await response.json()
-        const result = processBibleVerseText(
-          data,
-          reference,
-          isFallback ? requestedTranslation : undefined  // Pass requested if using fallback
-        )
+        const [, bookName, chapter, startVerse, endVerse] = match
+
+        // Type guards: ensure captured groups exist
+        if (!bookName || !chapter || !startVerse) {
+          throw new Error(`Invalid reference format: ${reference}`)
+        }
+
+        // Get book number (1-66)
+        const bookNumber = getBookNumber(bookName)
+        if (bookNumber === null) {
+          throw new Error(`Unknown book: ${bookName}`)
+        }
+
+        let result: ProcessedBibleVerse
+
+        if (endVerse) {
+          // Verse range: fetch entire chapter and filter
+          // Format: https://bolls.life/get-text/ESV/43/3/
+          const url = `https://bolls.life/get-text/${translation}/${bookNumber}/${chapter}/`
+          const response = await fetch(url)
+
+          if (!response.ok) {
+            throw new Error(`API request failed with status ${response.status}`)
+          }
+
+          const data = await response.json()
+          result = processBollsVerseRange(
+            data,
+            translation,
+            parseInt(startVerse),
+            parseInt(endVerse)
+          )
+        } else {
+          // Single verse
+          // Format: https://bolls.life/get-verse/ESV/43/3/16/
+          const url = `https://bolls.life/get-verse/${translation}/${bookNumber}/${chapter}/${startVerse}/`
+          const response = await fetch(url)
+
+          if (!response.ok) {
+            throw new Error(`API request failed with status ${response.status}`)
+          }
+
+          const data = await response.json()
+          result = processBollsVerse(data, translation)
+        }
 
         if (!result.text) {
           return {
             text: 'Click the links below to read this verse:',
-            translation: requestedTranslation
+            translation: translation
           }
         }
 
@@ -86,7 +127,7 @@ export default defineNuxtPlugin((nuxtApp) => {
         // Return friendly message with working links
         return {
           text: 'Click the links below to read this verse:',
-          translation: requestedTranslation
+          translation: translation
         }
       }
     }
@@ -94,18 +135,6 @@ export default defineNuxtPlugin((nuxtApp) => {
     private createOverlay(): HTMLElement {
       const overlay = document.createElement('div')
       overlay.className = 'bible-tooltip-overlay'
-      overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 9999;
-        display: none;
-        background: transparent;
-        pointer-events: auto;
-        touch-action: none;
-      `
       document.body.appendChild(overlay)
       return overlay
     }
@@ -113,26 +142,6 @@ export default defineNuxtPlugin((nuxtApp) => {
     private createTooltip(): HTMLElement {
       const tooltip = document.createElement('div')
       tooltip.className = 'bible-tooltip'
-
-      // Get computed theme colors from document root
-      const computedStyle = getComputedStyle(document.documentElement)
-      const appBarBgColor = computedStyle.getPropertyValue('--v-theme-surface-appbar') || '228, 234, 240'
-      const contentTextColor = computedStyle.getPropertyValue('--v-theme-on-surface') || '36, 41, 47'
-
-      tooltip.style.cssText = `
-        position: fixed;
-        background: rgb(${appBarBgColor});
-        color: rgb(${contentTextColor});
-        padding: 0.75rem 1rem;
-        border-radius: 0.5rem;
-        font-size: 0.875rem;
-        line-height: 1.4;
-        max-width: 25rem;
-        z-index: 10000;
-        box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,0.3);
-        display: none;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      `
       document.body.appendChild(tooltip)
       return tooltip
     }
@@ -167,38 +176,23 @@ export default defineNuxtPlugin((nuxtApp) => {
       const bibleGatewayUrl = `https://www.biblegateway.com/passage/?search=${encodeURIComponent(reference)}&version=ESV`
       const bibleHubUrl = createBibleHubInterlinearUrl(reference)
 
-      // Get link color from CSS variables
-      const computedStyle = getComputedStyle(document.documentElement)
-      const linkColor = computedStyle.getPropertyValue('--v-theme-primary') || '9, 105, 218'
-      const outlineColor = computedStyle.getPropertyValue('--v-theme-outline') || '208, 215, 222'
-      const secondaryColor = computedStyle.getPropertyValue('--v-theme-secondary') || '101, 109, 118'
-
-      // Build title with translation (showing fallback if applicable)
-      let translationDisplay = ''
-      if (verseData.requestedTranslation && verseData.requestedTranslation !== verseData.translation) {
-        // Using fallback translation
-        translationDisplay = `${verseData.translation} <span style="color: rgb(${secondaryColor}); font-weight: 400; font-size: 0.75rem;">• ${verseData.requestedTranslation} unavailable</span>`
-      } else if (verseData.translation) {
-        // Using requested translation
-        translationDisplay = verseData.translation
-      }
-
-      const title = translationDisplay
-        ? `${reference} <span style="color: rgb(${secondaryColor}); font-weight: 500;">(${translationDisplay})</span>`
+      // Build title with translation
+      const title = verseData.translation
+        ? `${reference} <span class="bible-tooltip-translation">(${verseData.translation})</span>`
         : reference
 
       this.tooltip.innerHTML = `
-        <div style="font-weight: 600; margin-bottom: 0.25rem;">${title}</div>
-        <div style="line-height: 1.5; margin-bottom: 0.75rem;">${verseData.text}</div>
-        <div style="border-top: 1px solid rgb(${outlineColor}); padding-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.75rem;">
-          <a href="${bibleGatewayUrl}" target="_blank" rel="noopener noreferrer" style="color: rgb(${linkColor}); text-decoration: none; font-size: 0.8125rem; display: inline-flex; align-items: center; gap: 0.25rem;">
-            <svg style="width: 0.875rem; height: 0.875rem; fill: currentColor;" viewBox="0 0 24 24">
+        <div class="bible-tooltip-title">${title}</div>
+        <div class="bible-tooltip-text">${verseData.text}</div>
+        <div class="bible-tooltip-footer">
+          <a href="${bibleGatewayUrl}" target="_blank" rel="noopener noreferrer" class="bible-tooltip-link">
+            <svg class="bible-tooltip-icon" viewBox="0 0 24 24">
               <path d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z" />
             </svg>
             Read Full Context
           </a>
-          <a href="${bibleHubUrl}" target="_blank" rel="noopener noreferrer" style="color: rgb(${linkColor}); text-decoration: none; font-size: 0.8125rem; display: inline-flex; align-items: center; gap: 0.25rem;">
-            <svg style="width: 0.875rem; height: 0.875rem; fill: currentColor;" viewBox="0 0 24 24">
+          <a href="${bibleHubUrl}" target="_blank" rel="noopener noreferrer" class="bible-tooltip-link">
+            <svg class="bible-tooltip-icon" viewBox="0 0 24 24">
               <path d="M12.87,15.07L10.33,12.56L10.36,12.53C12.1,10.59 13.34,8.36 14.07,6H17V4H10V2H8V4H1V6H12.17C11.5,7.92 10.44,9.75 9,11.35C8.07,10.32 7.3,9.19 6.69,8H4.69C5.42,9.63 6.42,11.17 7.67,12.56L2.58,17.58L4,19L9,14L12.11,17.11L12.87,15.07M18.5,10H16.5L12,22H14L15.12,19H19.87L21,22H23L18.5,10M15.88,17L17.5,12.67L19.12,17H15.88Z" />
             </svg>
             Interlinear
@@ -400,7 +394,6 @@ export default defineNuxtPlugin((nuxtApp) => {
             const span = document.createElement('span')
             span.className = 'bible-ref'
             span.setAttribute('data-reference', match.text)
-            span.style.cssText = 'color: rgb(var(--v-theme-primary)); text-decoration: underline; cursor: help;'
             span.textContent = match.displayText
             fragment.appendChild(span)
 

@@ -17,22 +17,15 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    preset: 'static',  // Pure static preset - no SPA fallbacks
-    prerender: {
-      routes: [
-        '/',
-        '/about',
-        '/disclaimer',
-        '/edit'
-      ]
-    }
+    preset: 'static'  // Pure static preset - no SPA fallbacks
   },
 
   ssr: true,
 
   css: [
     '~/assets/css/markdown.css',
-    '~/assets/css/print.css'
+    '~/assets/css/print.css',
+    '~/assets/css/bible-tooltips.css'
   ],
 
   modules: [
