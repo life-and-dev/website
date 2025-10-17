@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "tsx scripts/copy-images.ts && nuxt build",
+    "build:production": "bash scripts/build.sh",
     "dev": "nuxt dev",
     "generate": "tsx scripts/copy-images.ts && nuxt generate",
     "preview": "nuxt preview",
