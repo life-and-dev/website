@@ -185,18 +185,8 @@ export default defineNuxtPlugin((nuxtApp) => {
         <div class="bible-tooltip-title">${title}</div>
         <div class="bible-tooltip-text">${verseData.text}</div>
         <div class="bible-tooltip-footer">
-          <a href="${bibleGatewayUrl}" target="_blank" rel="noopener noreferrer" class="bible-tooltip-link">
-            <svg class="bible-tooltip-icon" viewBox="0 0 24 24">
-              <path d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z" />
-            </svg>
-            Read Full Context
-          </a>
-          <a href="${bibleHubUrl}" target="_blank" rel="noopener noreferrer" class="bible-tooltip-link">
-            <svg class="bible-tooltip-icon" viewBox="0 0 24 24">
-              <path d="M12.87,15.07L10.33,12.56L10.36,12.53C12.1,10.59 13.34,8.36 14.07,6H17V4H10V2H8V4H1V6H12.17C11.5,7.92 10.44,9.75 9,11.35C8.07,10.32 7.3,9.19 6.69,8H4.69C5.42,9.63 6.42,11.17 7.67,12.56L2.58,17.58L4,19L9,14L12.11,17.11L12.87,15.07M18.5,10H16.5L12,22H14L15.12,19H19.87L21,22H23L18.5,10M15.88,17L17.5,12.67L19.12,17H15.88Z" />
-            </svg>
-            Interlinear
-          </a>
+          <a href="${bibleGatewayUrl}" target="_blank" rel="noopener noreferrer" class="bible-tooltip-link"><span style="font-size: 1.5em">📓</span> Full Context</a>
+          <a href="${bibleHubUrl}" target="_blank" rel="noopener noreferrer" class="bible-tooltip-link"><span style="font-size: 1.5em">אΩ</span> Interlinear</a>
         </div>
       `
 
