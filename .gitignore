@@ -41,7 +41,6 @@ logs
 /public/site.webmanifest
 
 # Keep static assets
-!/public/favicon.ico
 !/public/robots.txt
 
 # Temporary Claude script files
