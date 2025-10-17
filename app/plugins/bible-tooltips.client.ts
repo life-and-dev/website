@@ -54,8 +54,9 @@ export default defineNuxtPlugin((nuxtApp) => {
 
       try {
         // Using bible-api.com which supports CORS and is free
-        // Format: https://bible-api.com/John+3:16?translation=esv
-        const url = `https://bible-api.com/${encodeURIComponent(reference)}?translation=${translation.toLowerCase()}`
+        // Format: https://bible-api.com/John+3:16
+        // NOTE: bible-api.com doesn't support ESV, it uses World English Bible (WEB) by default
+        const url = `https://bible-api.com/${encodeURIComponent(reference)}`
         const response = await fetch(url)
         if (!response.ok) {
           throw new Error(`API request failed with status ${response.status}`)
@@ -260,8 +261,18 @@ export default defineNuxtPlugin((nuxtApp) => {
             if (parent.classList.contains('bible-tooltip') ||
                 parent.classList.contains('no-bible') ||
                 parent.tagName === 'SCRIPT' ||
-                parent.tagName === 'STYLE') {
+                parent.tagName === 'STYLE' ||
+                parent.tagName === 'A') {  // Don't process text inside links
               return NodeFilter.FILTER_REJECT
+            }
+
+            // Also check if any ancestor is a link
+            let ancestor = parent.parentElement
+            while (ancestor) {
+              if (ancestor.tagName === 'A') {
+                return NodeFilter.FILTER_REJECT
+              }
+              ancestor = ancestor.parentElement
             }
 
             return NodeFilter.FILTER_ACCEPT

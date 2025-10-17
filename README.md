@@ -250,7 +250,7 @@ Matthew 5:3-12 (NIV)
 Psalm 23 (KJV)
 John 14:16,26  # Shorthand for multiple verses
 ```
-*Automatically enhanced with tooltips showing verse text + links to BibleGateway and BibleHub interlinear*
+*Automatically enhanced with tooltips showing verse text (World English Bible translation) + links to BibleGateway and BibleHub interlinear*
 
 ### Image Guidelines
 
@@ -515,17 +515,25 @@ npm test -- bible-tooltips      # Bible verse reference parsing tests
 * `ProseTable.vue` - Renders tables as Vuetify v-data-table
 * `ProseBlockquote.vue` - Renders quotes as Material Design cards
 
-**5. Navigation System:**
+**5. Post-Render Processing:**
+* Uses Vue's `onUpdated()` lifecycle hook for content processing
+* `useContentPostProcessing` composable handles Bible tooltips + TOC generation
+* Processes after Nuxt Content's ContentRenderer finishes rendering
+* Guard flags prevent duplicate processing during navigation
+
+**6. Navigation System:**
 * H1-based titles (extracted from markdown body, not frontmatter)
 * `_menu.yml` files control order (fetched via HTTP, not @nuxt/content query)
 * Alphabetical fallback for unlisted pages
+* Table of Contents (TOC) generated from H2/H3 headings (minimum 2 required)
+* TOC appears in right sidebar (desktop) or mobile drawer expansion panel
 
-**6. Material Design 3 Styling:**
+**7. Material Design 3 Styling:**
 * Text fields use `rounded="pill"` for semi-circular ends (MD3 spec)
 * Configured globally in `nuxt.config.ts` VTextField defaults
 * All inputs inherit pill shape without component-specific overrides
 
-**7. Vuetify Layout System with Fixed Positioning:**
+**8. Vuetify Layout System with Fixed Positioning:**
 * Desktop sidebars use VNavigationDrawer components for MD3 styling
 * CSS overrides force `position: fixed` for sticky behavior (not typical Vuetify usage)
 * Content spacing managed by Vuetify's `--v-layout-left/right` CSS variables
@@ -786,6 +794,62 @@ npm run dev
 * Desktop: `<AppNavigation :show-search="true" />` (shows search)
 * Mobile: `<AppNavigation :show-search="false" />` (hides search, uses standalone)
 
+### Table of Contents Not Appearing
+
+**Symptoms:**
+* TOC appears on initial page load but disappears after navigation
+* TOC never appears on any page
+* TOC appears inconsistently
+
+**Causes:**
+1. Page has fewer than 2 H2/H3 headings (TOC minimum)
+2. Race condition between layout and page components (fixed in 2025-10-17)
+
+**Check:**
+```bash
+# View page headings in browser console
+document.querySelectorAll('h2, h3')
+# Should return NodeList with 2+ elements
+```
+
+**Solution:**
+The TOC system uses Vue's `onUpdated()` lifecycle hook to process content after Nuxt Content's ContentRenderer finishes rendering. This is the standard Vue pattern.
+
+**Technical Details:**
+* `useContentPostProcessing` composable runs in page components
+* Processes after ContentRenderer completes (via `onUpdated()` + `nextTick()`)
+* Guard flag prevents duplicate processing
+* Layout provides `generateTOC` function but doesn't manage timing
+* `useTableOfContents` checks for minimum 2 H2/H3 headings
+
+**If TOC still doesn't appear:**
+```bash
+# Clear cache and restart
+rm -rf .nuxt .output
+npm run dev
+```
+
+### Bible Verse Tooltips Not Working
+
+**Symptoms:**
+* Blue underlines appear but tooltip shows "Click the links below to read this verse"
+* No verse text in tooltip
+* API error in browser console
+
+**Cause:**
+Bible API (bible-api.com) returns verse text in World English Bible (WEB) translation. If API is unavailable, tooltip shows fallback text with links only.
+
+**Check:**
+```bash
+# Test API directly
+curl "https://bible-api.com/John%203:16"
+# Should return JSON with verse text
+```
+
+**Fix:**
+* API unavailability is temporary - retry later
+* Links to BibleGateway and BibleHub still work (external sites)
+* No code changes needed - API issue resolves itself
 
 ## Migration from Grav CMS
 

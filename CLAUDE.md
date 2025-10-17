@@ -246,6 +246,64 @@ async function isDraftOnlyImage(imagePath: string): Promise<boolean> {
 - Bonuses: Position (+2), Multi-field (+3)
 - Penalties: Path depth (-1 per level beyond root)
 
+### TOC Post-Render Processing (2025-10-17)
+**Problem:** Table of Contents appeared on initial load but disappeared after navigating to other pages.
+
+**Root Cause:** Layout's `watch(route.path)` cleared TOC AFTER page component had already generated it. Race condition between parent layout and child page components.
+
+**Solution:** Use Vue's standard `onUpdated()` lifecycle hook in page components. Remove conflicting layout watch.
+
+**Implementation:**
+```typescript
+// app/composables/useContentPostProcessing.ts
+export function useContentPostProcessing(pageRef: Ref<any>) {
+  const processedPageId = ref<string | null>(null)
+
+  // Reset flag when new data arrives
+  watch(pageRef, () => { processedPageId.value = null }, { immediate: true })
+
+  // Process after ContentRenderer finishes rendering
+  onUpdated(() => {
+    nextTick(() => {
+      if (processedPageId.value === pageId) return  // Guard: prevent duplicates
+      processedPageId.value = pageId
+      $bibleTooltips.scan()
+      layoutGenerateTOC()  // useTableOfContents handles < 2 headings check
+    })
+  })
+
+  // Handle initial mount
+  onMounted(() => { nextTick(() => processContent()) })
+}
+```
+
+**Key Points:**
+- `onUpdated()` fires after ContentRenderer completes (standard Vue pattern)
+- `nextTick()` ensures DOM updates are fully committed
+- Guard flag prevents duplicate processing
+- No timers, MutationObservers, or template refs needed
+- Layout no longer clears TOC (caused race condition)
+
+**Result:** TOC appears reliably on both initial load and navigation.
+
+### Bible API Translation Fix (2025-10-17)
+**Problem:** Bible verse tooltips showed 404 errors when fetching verses from bible-api.com.
+
+**Root Cause:** The bible-api.com service doesn't support the ESV translation parameter.
+
+**Solution:** Remove translation parameter from API requests. Service returns World English Bible (WEB) by default.
+
+**Change:**
+```typescript
+// ❌ WRONG - ESV not supported
+const url = `https://bible-api.com/${encodeURIComponent(reference)}?translation=esv`
+
+// ✅ CORRECT - Use default WEB translation
+const url = `https://bible-api.com/${encodeURIComponent(reference)}`
+```
+
+**Result:** Bible verse tooltips fetch successfully with WEB translation.
+
 ## Usage Instructions
 
 ### Setup
@@ -356,13 +414,14 @@ CONTENT=word npm run generate     # → deploy to word.ofgod.info
 │   │       ├── ProseBlockquote.vue   # Custom blockquote (VCard)
 │   │       └── ProseTable.vue        # Renders tables as v-data-table
 │   ├── composables/
-│   │   ├── useBreadcrumbs.ts       # Generate breadcrumbs
-│   │   ├── useNavigationTree.ts    # Build tree from pages
-│   │   ├── useSearchRelevance.ts   # Search relevance scoring
-│   │   ├── useSiteConfig.ts        # Multi-domain canonical URLs + GitHub config
-│   │   ├── useGitHubEdit.ts        # Generate GitHub edit URLs
-│   │   ├── useTableOfContents.ts   # Extract TOC from HTML
-│   │   └── useTableParser.ts       # Parse HTML tables for v-data-table
+│   │   ├── useBreadcrumbs.ts           # Generate breadcrumbs
+│   │   ├── useNavigationTree.ts        # Build tree from pages
+│   │   ├── useSearchRelevance.ts       # Search relevance scoring
+│   │   ├── useSiteConfig.ts            # Multi-domain canonical URLs + GitHub config
+│   │   ├── useGitHubEdit.ts            # Generate GitHub edit URLs
+│   │   ├── useTableOfContents.ts       # Extract TOC from HTML
+│   │   ├── useContentPostProcessing.ts # Post-render processing (Bible tooltips + TOC)
+│   │   └── useTableParser.ts           # Parse HTML tables for v-data-table
 │   ├── pages/
 │   │   ├── index.vue               # Home (queries content)
 │   │   └── [...slug].vue           # Dynamic pages
@@ -572,38 +631,26 @@ export CONTENT=church; npm run dev  # Sets for session
 - Use `useAppTheme` composable (not direct Vuetify manipulation)
 - Theme stored in localStorage as `theme-preference`
 
-### TOC Not Appearing on First Page Load (2025-10-12)
-**Problem:** Table of Contents (right sidebar) doesn't appear when loading the home page directly, only after navigation.
+### TOC Not Appearing After Navigation (2025-10-17)
+**Problem:** Table of Contents appears on initial page load but disappears after navigating to other pages.
 
-**Root Cause:** Using `watch(() => route.path, ..., { immediate: true })` alone causes the watch to run during setup BEFORE template refs are available. At that moment, `contentContainer.value` is `undefined` and TOC generation fails silently.
+**Root Cause:** Race condition between layout and page components. Layout's `watch(route.path)` cleared TOC AFTER page had already generated it.
 
-**Solution:** Both `watch` and `onMounted` are required - they serve different purposes:
-- `onMounted`: Handles initial page load (refs guaranteed available)
-- `watch`: Handles route changes during navigation (refs already available)
+**Solution:** Use Vue's `onUpdated()` lifecycle hook in page components (see Architecture Decisions → TOC Post-Render Processing). Remove layout's conflicting `watch(route.path)`.
 
-**Implementation:**
+**Fix:**
 ```typescript
-// Watch for navigation (without immediate)
-watch(() => route.path, async () => {
-  generateTOC(null)
-  await nextTick()
-  await nextTick()
-  setTimeout(() => {
-    if (contentContainer.value) generateTOC(contentContainer.value)
-  }, 100)
-})
+// Page components use useContentPostProcessing composable
+useContentPostProcessing(page)
 
-// Handle initial mount separately
-onMounted(async () => {
-  await nextTick()
-  await nextTick()
-  setTimeout(() => {
-    if (contentContainer.value) generateTOC(contentContainer.value)
-  }, 100)
+// Layout provides generateTOC but doesn't watch route changes
+provide('generateTOC', () => {
+  const container = mdAndUp.value ? desktopContentContainer.value : mobileContentContainer.value
+  if (container) generateTOC(container)
 })
 ```
 
-**Fix:** Never remove `onMounted` in favor of `watch` with `immediate: true` when dealing with template refs.
+**Key Insight:** `onUpdated()` is the standard Vue pattern for "run code after component updates". Fires reliably after ContentRenderer finishes rendering.
 
 ## Coding Rules
 

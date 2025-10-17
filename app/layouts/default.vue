@@ -177,12 +177,10 @@ function handleMobileSelection(path?: string) {
 }
 
 /**
- * Clear TOC when navigating to a new page
- * The page components will regenerate it when ContentRenderer emits @vue:mounted
+ * NOTE: We do NOT clear TOC on route change here
+ * The page component's useContentPostProcessing handles clearing and regenerating
+ * Clearing here causes a race condition where we clear AFTER the page has already generated TOC
  */
-watch(() => route.path, () => {
-  generateTOC(null)
-})
 </script>
 
 <style>
