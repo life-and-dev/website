@@ -23,19 +23,31 @@ Migrates content from a Grav-based website (located at `../eternal`) to statical
 ## Architecture Decisions
 
 ### Cloudflare Pages Static Site Routing (2025-10-17)
-**Problem:** Nitro's `cloudflare-pages-static` preset auto-generates `/* /404.html 404` in `_redirects`, which is an **invalid status code** for Cloudflare Pages. Valid codes are: 200, 301, 302, 303, 307, 308. This caused direct page access issues.
+**Problem:** Nitro's `cloudflare-pages-static` preset auto-generates `/* /404.html 404` in `_redirects`, which is an **invalid status code** for Cloudflare Pages (valid: 200, 301, 302, 303, 307, 308). This caused routing confusion.
 
-**Root Cause:** Nitro adds a fallback redirect for unmatched routes, but uses HTTP 404 status which Cloudflare Pages doesn't support in `_redirects` files.
+**Root Cause:** The `cloudflare-pages-static` preset is designed for hybrid apps with Functions, not pure SSG sites. It auto-generates SPA fallback redirects that conflict with static HTML serving.
 
-**Solution:** Use `_routes.json` to tell Cloudflare Pages this is a purely static site with no Functions:
+**Solution:** Use Nitro's generic `static` preset instead of the Cloudflare-specific one.
 
 **Files Created:**
 - [public/_routes.json](public/_routes.json) - Excludes all routes from Functions processing
 - Updated [scripts/watch-images.ts](scripts/watch-images.ts#L21) - Added `_routes.json` to STATIC_FILES preservation list
 
 **Configuration:**
+```typescript
+// nuxt.config.ts
+nitro: {
+  preset: 'static',  // Generic static preset, NOT 'cloudflare-pages-static'
+  prerender: {
+    routes: ['/'],
+    crawlLinks: true,
+    failOnError: false
+  }
+}
+```
+
 ```json
-// public/_routes.json
+// public/_routes.json (prevents Functions invocation)
 {
   "version": 1,
   "include": [],
@@ -43,36 +55,32 @@ Migrates content from a Grav-based website (located at `../eternal`) to statical
 }
 ```
 
-```typescript
-// nuxt.config.ts
-nitro: {
-  cloudflare: {
-    pages: {
-      routes: {
-        include: [],  // No Functions
-        exclude: []
-      }
-    }
-  }
-}
+```
+// public/_redirects (empty, no catch-all needed)
+# Fully static pre-rendered site - no catch-all redirect needed
+# Cloudflare Pages automatically serves static files and shows /404.html for missing pages
 ```
 
 **How It Works:**
-- `_routes.json` with `"exclude": ["/*"]` tells Cloudflare: serve ALL routes as static files
-- Invalid `/* /404.html 404` redirect is ignored (not a valid status code)
-- Cloudflare automatically:
-  - Serves existing files → 200 OK
-  - Shows /404.html for missing files → 404 Not Found
-  - Redirects `/downloads` → `/downloads/` → 308 Permanent Redirect
+- Generic `static` preset builds pure static HTML without platform-specific SPA fallbacks
+- `_routes.json` tells Cloudflare: "No Functions, serve everything as static files"
+- Empty `_redirects` file (no invalid rules generated)
+- Cloudflare Pages automatically:
+  - Serves existing HTML files → 200 OK
+  - Shows custom /404.html for missing files → 404 Not Found
+  - Redirects `/downloads` → `/downloads/` → 308 Permanent Redirect (trailing slash normalization)
+
+**Output Location:** `.output/public/` (not `dist/`)
 
 **Testing:**
 ```bash
-npx wrangler pages dev dist
-# ▲ [WARNING] Valid status codes are 200, 301, 302, 303, 307, or 308. Got 404.
-# Warning is expected - Cloudflare ignores the invalid rule
+CONTENT=word npm run generate
+npx wrangler pages dev .output/public
+# ✨ Parsed 0 valid redirect rules. (No invalid rules!)
+# curl -I http://localhost:8788/downloads → 308 → /downloads/ → 200 OK ✅
 ```
 
-**Result:** Direct page access works correctly (e.g., `https://word.ofgod.info/downloads` loads the page, not 404).
+**Result:** Direct page access works perfectly. No invalid redirects, no SPA confusion, pure static HTML serving.
 
 ### Environment Variable Loading Fix (2025-10-15)
 **Problem:** `CONTENT=ofgod npm run dev` defaulted to `eternal` directory. Command-line env vars were ignored.

@@ -66,7 +66,6 @@ export async function copyAllImages() {
 
   // Copy images (excluding logo.svg and favicon directory - handled separately)
   for (const ext of IMAGE_EXTS) {
-    const pattern = `${sourceDir}/**/*.${ext}`
     const files = await getAllFiles(sourceDir, ext)
 
     for (const sourcePath of files) {

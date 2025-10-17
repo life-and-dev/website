@@ -1,11 +1,6 @@
-# Fully static pre-rendered site
-# All pages exist as HTML files in the build
-# No catch-all needed - Cloudflare serves files directly
+# Fully static pre-rendered site - no catch-all redirect needed
+# Cloudflare Pages automatically serves static files and shows /404.html for missing pages
+# _routes.json controls routing (see public/_routes.json)
 
-# Cloudflare Pages automatically handles:
-# - /downloads → serves /downloads/index.html
-# - /about → serves /about/index.html
-# - Missing files → shows /404.html
-
-# Add specific redirects only if needed:
+# Add specific redirects below:
 # /old-path /new-path 301

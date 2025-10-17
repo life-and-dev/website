@@ -17,21 +17,11 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    preset: 'cloudflare-pages-static',
+    preset: 'static',
     prerender: {
       routes: ['/'],
       crawlLinks: true,
       failOnError: false
-    },
-    cloudflare: {
-      pages: {
-        routes: {
-          // Empty include = no Functions, purely static
-          // This prevents /* /404.html 404 redirect
-          include: [],
-          exclude: []
-        }
-      }
     }
   },
 
@@ -141,9 +131,6 @@ export default defineNuxtConfig({
         },
         VCardActions: {
           class: 'justify-end pa-4'
-        },
-        VContainer: {
-          // class: 'pa-6',
         },
 
         // Interactive Components
