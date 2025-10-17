@@ -1,0 +1,11 @@
+# Fully static pre-rendered site
+# All pages exist as HTML files in the build
+# No catch-all needed - Cloudflare serves files directly
+
+# Cloudflare Pages automatically handles:
+# - /downloads → serves /downloads/index.html
+# - /about → serves /about/index.html
+# - Missing files → shows /404.html
+
+# Add specific redirects only if needed:
+# /old-path /new-path 301

@@ -17,7 +17,8 @@ const STATIC_FILES = [
   'icon-512.png',
   'site.webmanifest',
   'robots.txt',
-  '_redirects'
+  '_redirects',
+  '_routes.json'
 ]
 const MENU_FILE = '_menu.yml'
 const LOGO_FILE = 'logo.svg'

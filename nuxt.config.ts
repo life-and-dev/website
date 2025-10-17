@@ -25,9 +25,10 @@ export default defineNuxtConfig({
     },
     cloudflare: {
       pages: {
-        // Don't generate _redirects for fully static site
         routes: {
-          include: ['/*'],
+          // Empty include = no Functions, purely static
+          // This prevents /* /404.html 404 redirect
+          include: [],
           exclude: []
         }
       }
