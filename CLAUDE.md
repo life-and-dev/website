@@ -23,48 +23,40 @@ Migrates content from a Grav-based website (located at `../eternal`) to statical
 ## Architecture Decisions
 
 ### Cloudflare Pages Static Site Routing (2025-10-17)
-**Problem:** Nitro's `cloudflare-pages-static` preset auto-generates `/* /404.html 404` in `_redirects`, which is an **invalid status code** for Cloudflare Pages (valid: 200, 301, 302, 303, 307, 308). This caused routing confusion.
+**Problem:** Direct page access like `https://word.ofgod.info/downloads` returned 404 errors. Pages would load initially but then Nuxt's client-side JavaScript showed 404 after a few milliseconds. Cloudflare Pages also cached the invalid `/* /404.html 404` redirect from previous deployments.
 
-**Root Cause:** The `cloudflare-pages-static` preset is designed for hybrid apps with Functions, not pure SSG sites. It auto-generates SPA fallback redirects that conflict with static HTML serving.
+**Root Cause:** The `cloudflare-pages-static` preset is designed for hybrid apps with Functions, not pure SSG sites. It auto-generates SPA fallback behavior that interferes with static HTML serving. Additionally, Cloudflare Pages caches redirect rules from previous deployments.
 
-**Solution:** Use Nitro's generic `static` preset instead of the Cloudflare-specific one.
-
-**Files Created:**
-- [public/_routes.json](public/_routes.json) - Excludes all routes from Functions processing
-- Updated [scripts/watch-images.ts](scripts/watch-images.ts#L21) - Added `_routes.json` to STATIC_FILES preservation list
+**Solution:** Use Nitro's generic `static` preset with explicit prerender routes. Include an **empty `_redirects` file** to override Cloudflare's cached redirect rules.
 
 **Configuration:**
 ```typescript
 // nuxt.config.ts
 nitro: {
-  preset: 'static',  // Generic static preset, NOT 'cloudflare-pages-static'
+  preset: 'static',  // Pure static preset - no SPA fallbacks
   prerender: {
-    routes: ['/'],
-    crawlLinks: true,
-    failOnError: false
+    routes: [
+      '/',
+      '/about',
+      '/disclaimer',
+      '/downloads',
+      '/edit'
+    ]
   }
 }
 ```
 
-```json
-// public/_routes.json (prevents Functions invocation)
-{
-  "version": 1,
-  "include": [],
-  "exclude": ["/*"]
-}
-```
+**Files Created:**
+- [public/_redirects](public/_redirects) - Empty file to override cached Cloudflare redirect rules
+- Updated [scripts/watch-images.ts](scripts/watch-images.ts#L12) - Added `_redirects` to STATIC_FILES preservation list
 
-```
-// public/_redirects (empty, no catch-all needed)
-# Fully static pre-rendered site - no catch-all redirect needed
-# Cloudflare Pages automatically serves static files and shows /404.html for missing pages
-```
+**Files Removed:**
+- `/public/_routes.json` - NOT needed for pure static sites (deleted)
 
 **How It Works:**
 - Generic `static` preset builds pure static HTML without platform-specific SPA fallbacks
-- `_routes.json` tells Cloudflare: "No Functions, serve everything as static files"
-- Empty `_redirects` file (no invalid rules generated)
+- Explicit route list ensures all pages are prerendered (no client-side 404)
+- Empty `_redirects` file tells Cloudflare: "No redirect rules - use defaults"
 - Cloudflare Pages automatically:
   - Serves existing HTML files → 200 OK
   - Shows custom /404.html for missing files → 404 Not Found
@@ -75,12 +67,15 @@ nitro: {
 **Testing:**
 ```bash
 CONTENT=word npm run generate
+cat .output/public/_redirects
+# Should show: "# No redirects - let Cloudflare serve static files directly"
 npx wrangler pages dev .output/public
 # ✨ Parsed 0 valid redirect rules. (No invalid rules!)
-# curl -I http://localhost:8788/downloads → 308 → /downloads/ → 200 OK ✅
+# Test: python3 -m http.server 8790
+# curl -I http://localhost:8790/downloads → 301 → /downloads/ → 200 OK ✅
 ```
 
-**Result:** Direct page access works perfectly. No invalid redirects, no SPA confusion, pure static HTML serving.
+**Result:** Direct page access works perfectly. Empty `_redirects` overrides cached rules. No invalid redirects, no client-side 404, pure static HTML serving.
 
 ### Environment Variable Loading Fix (2025-10-15)
 **Problem:** `CONTENT=ofgod npm run dev` defaulted to `eternal` directory. Command-line env vars were ignored.
@@ -313,15 +308,37 @@ git submodule status
 
 ## Production Deployment
 
-**Build per domain:**
+### Cloudflare Pages Configuration
+
+**IMPORTANT:** Set build output directory to `.output/public` (NOT `dist`)
+
+1. Go to your Cloudflare Pages project → **Builds & deployments**
+2. Set **Build output directory** to: `.output/public`
+3. Set **Build command**: `CONTENT=<domain> npm run generate`
+4. Set **Environment variable**: `CONTENT=<domain>`
+
+**Why:** The `static` preset outputs to `.output/public/`, not `dist/`. Using `dist` causes: `Failed: build output directory contains links to files that can't be accessed`
+
+### Build Commands Per Domain
+
 ```bash
-CONTENT=kingdom npm run generate
-# → Copies images from /content/kingdom/ to /public/kingdom/
-# → Builds static site
-# → Deploy .output/public/ to kingdom.ofgod.info
+# Build for each domain (run separately)
+CONTENT=ofgod npm run generate    # → deploy to ofgod.info
+CONTENT=kingdom npm run generate  # → deploy to kingdom.ofgod.info
+CONTENT=church npm run generate   # → deploy to church.ofgod.info
+CONTENT=son npm run generate      # → deploy to son.ofgod.info
+CONTENT=word npm run generate     # → deploy to word.ofgod.info
 ```
 
-**Hosting:** Any static host (Netlify, Vercel, GitHub Pages, S3+CloudFront). Pure static HTML/CSS/JS with SSR pre-rendering.
+**Output:** `.output/public/` contains the complete static site
+
+### Hosting Options
+
+- **Cloudflare Pages** (Recommended) - Native integration, global CDN
+- **Netlify** - Set publish directory to `.output/public`
+- **Vercel** - Set output directory to `.output/public`
+- **GitHub Pages** - Deploy `.output/public` directory
+- **Any static host** - Pure HTML/CSS/JS, no server required
 
 **Important:** Each domain needs separate build with different `CONTENT` env var.
 

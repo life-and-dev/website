@@ -17,13 +17,12 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    preset: 'cloudflare-pages',
+    preset: 'static',  // Pure static preset - no SPA fallbacks
     prerender: {
       routes: [
         '/',
         '/about',
         '/disclaimer',
-        '/downloads',
         '/edit'
       ]
     }
@@ -71,16 +70,16 @@ export default defineNuxtConfig({
 
     // Generate and copy favicons before build
     'build:before': async () => {
-      const domain = process.env.CONTENT || 'ofgod'
+      const domain: string = process.env.CONTENT || ''
       const { generateFavicons, copyFaviconsToPublic, generateWebManifest } = await import('./scripts/generate-favicons')
 
       // Domain name mapping
       const domainNames: Record<string, string> = {
         ofgod: 'Our Father God',
-        kingdom: 'The Kingdom of God',
-        son: 'The Son of God',
-        church: 'The Church of God',
-        word: 'The Word of God'
+        kingdom: 'Kingdom of God',
+        son: 'Son of God',
+        church: 'Church of God',
+        word: 'Word of God'
       }
 
       const name = domainNames[domain] || domain
