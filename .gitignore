@@ -23,6 +23,7 @@ logs
 !.env.example
 
 # Copied images from /content/ (source is tracked there)
+/public/*.ico
 /public/*.jpg
 /public/*.jpeg
 /public/*.png
@@ -37,6 +38,7 @@ logs
 /public/**/*.gif
 /public/**/*.svg
 /public/**/*.yml
+/public/site.webmanifest
 
 # Keep static assets
 !/public/favicon.ico

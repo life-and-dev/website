@@ -9,8 +9,25 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg']
-const STATIC_FILES = ['favicon.ico', 'robots.txt']
+const STATIC_FILES = [
+  'favicon.ico',
+  'favicon.svg',
+  'apple-touch-icon.png',
+  'icon-192.png',
+  'icon-512.png',
+  'site.webmanifest',
+  'robots.txt'
+]
 const MENU_FILE = '_menu.yml'
+const LOGO_FILE = 'logo.svg'
+const FAVICON_DIR = 'favicon'
+const FAVICON_FILES = [
+  'favicon.svg',
+  'favicon.ico',
+  'apple-touch-icon.png',
+  'icon-192.png',
+  'icon-512.png'
+]
 
 /**
  * Get content domain from environment variable (read at runtime, not import time)
@@ -34,23 +51,33 @@ function getTargetDir(): string {
 }
 
 /**
- * Copy all images and menu files from content to public directory (one-time)
+ * Copy all images, menus, and favicons from content to public directory (one-time)
  */
 export async function copyAllImages() {
   const sourceDir = getSourceDir()
   const targetDir = getTargetDir()
 
-  console.log(`📦 Copying images and menus from: ${sourceDir}`)
+  console.log(`📦 Copying images, menus, and favicons from: ${sourceDir}`)
   console.log(`📦 Target directory: ${targetDir}`)
 
   let copiedCount = 0
 
-  // Copy images
+  // Copy images (excluding logo.svg and favicon directory - handled separately)
   for (const ext of IMAGE_EXTS) {
     const pattern = `${sourceDir}/**/*.${ext}`
     const files = await getAllFiles(sourceDir, ext)
 
     for (const sourcePath of files) {
+      // Skip logo.svg - it's used for favicon generation
+      if (path.basename(sourcePath) === LOGO_FILE) {
+        continue
+      }
+
+      // Skip files in favicon directory - handled separately
+      if (sourcePath.includes(`${path.sep}${FAVICON_DIR}${path.sep}`)) {
+        continue
+      }
+
       await copyImage(sourcePath, false)
       copiedCount++
     }
@@ -62,6 +89,18 @@ export async function copyAllImages() {
     if (path.basename(sourcePath) === MENU_FILE) {
       await copyMenuFile(sourcePath, false)
       copiedCount++
+    }
+  }
+
+  // Copy favicon files
+  const faviconDir = path.join(sourceDir, FAVICON_DIR)
+  if (await fs.pathExists(faviconDir)) {
+    for (const faviconFile of FAVICON_FILES) {
+      const sourcePath = path.join(faviconDir, faviconFile)
+      if (await fs.pathExists(sourcePath)) {
+        await copyFaviconFile(sourcePath, false)
+        copiedCount++
+      }
     }
   }
 
@@ -125,22 +164,31 @@ export async function watchImages() {
 
   watcher
     .on('add', (filePath) => {
-      if (path.basename(filePath) === MENU_FILE) {
+      const fileName = path.basename(filePath)
+      if (fileName === MENU_FILE) {
         copyMenuFile(filePath, true, 'added')
+      } else if (fileName === LOGO_FILE) {
+        handleLogoChange(filePath, 'added')
       } else {
         copyImage(filePath, true, 'added')
       }
     })
     .on('change', (filePath) => {
-      if (path.basename(filePath) === MENU_FILE) {
+      const fileName = path.basename(filePath)
+      if (fileName === MENU_FILE) {
         copyMenuFile(filePath, true, 'updated')
+      } else if (fileName === LOGO_FILE) {
+        handleLogoChange(filePath, 'updated')
       } else {
         copyImage(filePath, true, 'updated')
       }
     })
     .on('unlink', (filePath) => {
-      if (path.basename(filePath) === MENU_FILE) {
+      const fileName = path.basename(filePath)
+      if (fileName === MENU_FILE) {
         deleteMenuFile(filePath)
+      } else if (fileName === LOGO_FILE) {
+        console.log(`🗑️ Logo removed: ${fileName}`)
       } else {
         deleteImage(filePath)
       }
@@ -275,6 +323,46 @@ async function isDraftOnlyImage(imagePath: string): Promise<boolean> {
 
   // Skip copying if only draft exists (no published version)
   return !hasPublishedVersion && hasDraftVersion
+}
+
+/**
+ * Copy a single favicon file from content to public
+ */
+async function copyFaviconFile(sourcePath: string, log: boolean = true, action: string = 'copied') {
+  try {
+    const targetDir = getTargetDir()
+    const fileName = path.basename(sourcePath)
+    const targetPath = path.join(targetDir, fileName)
+
+    await fs.ensureDir(targetDir)
+    await fs.copy(sourcePath, targetPath)
+
+    if (log) {
+      console.log(`✓ Favicon ${action}: ${fileName}`)
+    }
+  } catch (error) {
+    console.error(`❌ Failed to copy favicon ${sourcePath}:`, error)
+  }
+}
+
+/**
+ * Handle logo.svg changes - regenerate favicons
+ */
+async function handleLogoChange(logoPath: string, action: string) {
+  const domain = getContentDomain()
+  console.log(`🎨 Logo ${action}, regenerating favicons for ${domain}...`)
+
+  try {
+    const { generateFavicons, copyFaviconsToPublic } = await import('./generate-favicons.js')
+    const success = await generateFavicons(domain)
+
+    if (success) {
+      await copyFaviconsToPublic(domain)
+      console.log(`✓ Favicons regenerated for ${domain}\n`)
+    }
+  } catch (error) {
+    console.error(`❌ Failed to regenerate favicons:`, error)
+  }
 }
 
 /**

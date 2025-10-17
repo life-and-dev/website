@@ -65,10 +65,10 @@ export default defineNuxtConfig({
       }
     },
 
-    // Generate favicons before build
+    // Generate and copy favicons before build
     'build:before': async () => {
       const domain = process.env.CONTENT || 'ofgod'
-      const { generateFavicons, copyDomainFavicons, generateWebManifest } = await import('./scripts/generate-favicons')
+      const { generateFavicons, copyFaviconsToPublic, generateWebManifest } = await import('./scripts/generate-favicons')
 
       // Domain name mapping
       const domainNames: Record<string, string> = {
@@ -85,7 +85,7 @@ export default defineNuxtConfig({
       const success = await generateFavicons(domain)
 
       if (success) {
-        await copyDomainFavicons(domain)
+        await copyFaviconsToPublic(domain)
         await generateWebManifest(domain, name)
         console.log(`✅ Favicons ready for ${domain}\n`)
       }

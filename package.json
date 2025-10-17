@@ -9,6 +9,7 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "migrate": "tsx scripts/migrate-grav.ts",
+    "favicon": "tsx scripts/generate-favicons.ts",
     "test": "vitest"
   },
   "dependencies": {
@@ -31,6 +32,7 @@
     "chokidar": "^4.0.3",
     "fs-extra": "^11.3.2",
     "playwright": "^1.55.1",
+    "sharp": "^0.34.4",
     "tsx": "^4.20.5",
     "vitest": "^3.2.4"
   }
