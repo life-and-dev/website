@@ -17,11 +17,15 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    preset: 'static',
+    preset: 'cloudflare-pages',
     prerender: {
-      routes: ['/'],
-      crawlLinks: true,
-      failOnError: false
+      routes: [
+        '/',
+        '/about',
+        '/disclaimer',
+        '/downloads',
+        '/edit'
+      ]
     }
   },
 
