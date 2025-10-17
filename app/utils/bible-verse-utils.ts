@@ -12,11 +12,78 @@ interface BibleApiResponse {
 export interface ProcessedBibleVerse {
   text: string
   translation: string
+  requestedTranslation?: string  // Original requested translation (if different from actual)
 }
 
 export interface ParsedReference {
   reference: string  // Reference without translation (e.g., "John 3:16")
   translation: string  // Translation code (e.g., "ESV", defaults to "ESV")
+}
+
+export interface MappedTranslation {
+  code: string  // Actual translation code to use with API
+  requested: string  // Original requested translation
+  isFallback: boolean  // True if using fallback translation
+}
+
+/**
+ * Translations supported by bible-api.com
+ * See: https://bible-api.com/
+ */
+const SUPPORTED_TRANSLATIONS = [
+  'web',      // World English Bible (default)
+  'kjv',      // King James Version
+  'asv',      // American Standard Version (1901)
+  'bbe',      // Bible in Basic English
+  'darby',    // Darby Translation
+  'dra',      // Douay-Rheims American Edition
+  'ylt',      // Young's Literal Translation
+  'oeb-us',   // Open English Bible, US Edition
+  'oeb-cw',   // Open English Bible, Commonwealth Edition
+  'webbe',    // World English Bible, British Edition
+  'cherokee', // Cherokee New Testament
+  'cuv',      // Chinese Union Version
+  'bkr',      // Czech Bible Kralická
+  'clementine', // Latin Clementine Vulgate
+  'almeida',  // Portuguese João Ferreira de Almeida
+  'rccv'      // Romanian Cornilescu
+] as const
+
+/**
+ * Map requested translation to supported translation
+ * @param requested - Requested translation code (case-insensitive)
+ * @returns Mapped translation info
+ */
+export function mapTranslation(requested: string): MappedTranslation {
+  const normalized = requested.toLowerCase()
+
+  // Check if directly supported
+  if (SUPPORTED_TRANSLATIONS.includes(normalized as any)) {
+    return {
+      code: normalized,
+      requested,
+      isFallback: false
+    }
+  }
+
+  // Apply fallback mapping
+  const fallbackMap: Record<string, string> = {
+    'esv': 'kjv',    // ESV → KJV (both formal equivalence)
+    'nkjv': 'kjv',   // NKJV → KJV (NKJV is modernized KJV)
+    'nasb': 'asv',   // NASB → ASV (both literal American)
+    'niv': 'web',    // NIV → WEB (both dynamic equivalence)
+    'nlt': 'web',    // NLT → WEB (both dynamic equivalence)
+    'nrsv': 'web',   // NRSV → WEB (modern English)
+    'amp': 'web',    // AMP → WEB (readable modern)
+  }
+
+  const fallbackCode = fallbackMap[normalized] || 'web'
+
+  return {
+    code: fallbackCode,
+    requested,
+    isFallback: true
+  }
 }
 
 /**
@@ -48,9 +115,10 @@ const MAX_VERSES = 4
  * Process Bible API response and truncate to first 4 verses if needed
  * @param data - Response from bible-api.com
  * @param _reference - Optional reference string (reserved for future use)
+ * @param requestedTranslation - Optional originally requested translation (if different from actual)
  * @returns Processed verse text with translation and ellipsis if truncated
  */
-export function processBibleVerseText(data: BibleApiResponse, _reference?: string): ProcessedBibleVerse {
+export function processBibleVerseText(data: BibleApiResponse, _reference?: string, requestedTranslation?: string): ProcessedBibleVerse {
   let text = ''
   let wasTruncated = false
 
@@ -79,7 +147,8 @@ export function processBibleVerseText(data: BibleApiResponse, _reference?: strin
 
   return {
     text: finalText,
-    translation
+    translation,
+    requestedTranslation: requestedTranslation ? requestedTranslation.toUpperCase() : undefined
   }
 }
 

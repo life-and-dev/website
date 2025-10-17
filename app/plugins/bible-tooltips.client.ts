@@ -1,5 +1,5 @@
 // Custom Bible Verse Tooltip Plugin using Bible-API.com
-import { processBibleVerseText, createBibleHubInterlinearUrl, parseReference, type ProcessedBibleVerse } from '~/utils/bible-verse-utils'
+import { processBibleVerseText, createBibleHubInterlinearUrl, parseReference, mapTranslation, type ProcessedBibleVerse } from '~/utils/bible-verse-utils'
 import { createBibleReferencePatterns } from '~/utils/bible-book-names'
 
 export default defineNuxtPlugin((nuxtApp) => {
@@ -50,30 +50,34 @@ export default defineNuxtPlugin((nuxtApp) => {
       }
 
       // Parse reference to extract translation (defaults to ESV)
-      const { reference, translation } = parseReference(fullReference)
+      const { reference, translation: requestedTranslation } = parseReference(fullReference)
+
+      // Map requested translation to supported translation
+      const { code: apiTranslation, isFallback } = mapTranslation(requestedTranslation)
 
       try {
-        // Using bible-api.com which supports CORS and is free
-        // Format: https://bible-api.com/John+3:16
-        // NOTE: bible-api.com doesn't support ESV, it uses World English Bible (WEB) by default
-        const url = `https://bible-api.com/${encodeURIComponent(reference)}`
+        // Using bible-api.com which supports 18 translations
+        // Format: https://bible-api.com/John+3:16?translation=kjv
+        // See: https://bible-api.com/ for supported translations
+        const url = `https://bible-api.com/${encodeURIComponent(reference)}?translation=${apiTranslation}`
         const response = await fetch(url)
         if (!response.ok) {
           throw new Error(`API request failed with status ${response.status}`)
         }
 
         const data = await response.json()
-        const result = processBibleVerseText(data, reference)
+        const result = processBibleVerseText(
+          data,
+          reference,
+          isFallback ? requestedTranslation : undefined  // Pass requested if using fallback
+        )
 
         if (!result.text) {
           return {
             text: 'Click the links below to read this verse:',
-            translation: translation
+            translation: requestedTranslation
           }
         }
-
-        // Override translation with the requested one
-        result.translation = translation
 
         this.cache.set(fullReference, result)
         return result
@@ -82,7 +86,7 @@ export default defineNuxtPlugin((nuxtApp) => {
         // Return friendly message with working links
         return {
           text: 'Click the links below to read this verse:',
-          translation: translation
+          translation: requestedTranslation
         }
       }
     }
@@ -169,9 +173,18 @@ export default defineNuxtPlugin((nuxtApp) => {
       const outlineColor = computedStyle.getPropertyValue('--v-theme-outline') || '208, 215, 222'
       const secondaryColor = computedStyle.getPropertyValue('--v-theme-secondary') || '101, 109, 118'
 
-      // Build title with translation
-      const title = verseData.translation
-        ? `${reference} <span style="color: rgb(${secondaryColor}); font-weight: 500;">(${verseData.translation})</span>`
+      // Build title with translation (showing fallback if applicable)
+      let translationDisplay = ''
+      if (verseData.requestedTranslation && verseData.requestedTranslation !== verseData.translation) {
+        // Using fallback translation
+        translationDisplay = `${verseData.translation} <span style="color: rgb(${secondaryColor}); font-weight: 400; font-size: 0.75rem;">• ${verseData.requestedTranslation} unavailable</span>`
+      } else if (verseData.translation) {
+        // Using requested translation
+        translationDisplay = verseData.translation
+      }
+
+      const title = translationDisplay
+        ? `${reference} <span style="color: rgb(${secondaryColor}); font-weight: 500;">(${translationDisplay})</span>`
         : reference
 
       this.tooltip.innerHTML = `

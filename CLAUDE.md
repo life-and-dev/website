@@ -286,23 +286,50 @@ export function useContentPostProcessing(pageRef: Ref<any>) {
 
 **Result:** TOC appears reliably on both initial load and navigation.
 
-### Bible API Translation Fix (2025-10-17)
-**Problem:** Bible verse tooltips showed 404 errors when fetching verses from bible-api.com.
+### Bible API Translation Support (2025-10-17)
+**Problem:** Bible verse tooltips showed 404 errors. Users requested ESV and NKJV translations, but bible-api.com has limited translation support.
 
-**Root Cause:** The bible-api.com service doesn't support the ESV translation parameter.
+**Root Cause:** bible-api.com only supports 18 translations (web, kjv, asv, bbe, darby, dra, ylt, oeb-us, oeb-cw, webbe, cherokee, cuv, bkr, clementine, almeida, rccv). ESV and NKJV are copyrighted translations not available in most free APIs.
 
-**Solution:** Remove translation parameter from API requests. Service returns World English Bible (WEB) by default.
+**Solution:** Intelligent translation fallback system with transparent user feedback.
 
-**Change:**
+**Translation Mapping Strategy:**
 ```typescript
-// ❌ WRONG - ESV not supported
-const url = `https://bible-api.com/${encodeURIComponent(reference)}?translation=esv`
-
-// ✅ CORRECT - Use default WEB translation
-const url = `https://bible-api.com/${encodeURIComponent(reference)}`
+// app/utils/bible-verse-utils.ts
+const fallbackMap: Record<string, string> = {
+  'esv': 'kjv',    // ESV → KJV (both formal equivalence)
+  'nkjv': 'kjv',   // NKJV → KJV (NKJV is modernized KJV)
+  'nasb': 'asv',   // NASB → ASV (both literal American)
+  'niv': 'web',    // NIV → WEB (both dynamic equivalence)
+  'nlt': 'web',    // NLT → WEB (both dynamic equivalence)
+  'nrsv': 'web',   // NRSV → WEB (modern English)
+  'amp': 'web',    // AMP → WEB (readable modern)
+}
 ```
 
-**Result:** Bible verse tooltips fetch successfully with WEB translation.
+**Implementation:**
+- [bible-verse-utils.ts](app/utils/bible-verse-utils.ts) - Added `mapTranslation()` function and `SUPPORTED_TRANSLATIONS` list
+- [bible-tooltips.client.ts](app/plugins/bible-tooltips.client.ts#L56-L62) - Applies translation mapping before API call: `?translation=kjv`
+- Tooltip displays fallback info: `John 3:16 (KJV • ESV unavailable)` when using fallback
+
+**User Experience:**
+- Requested: `John 3:16 (ESV)` → Displays: `John 3:16 (KJV • ESV unavailable)`
+- Requested: `John 3:16 (NKJV)` → Displays: `John 3:16 (KJV • NKJV unavailable)`
+- Requested: `John 3:16 (KJV)` → Displays: `John 3:16 (KJV)` (no fallback notice)
+- No translation specified → Defaults to ESV, falls back to KJV with notice
+
+**API Details:**
+- Endpoint: `https://bible-api.com/{reference}?translation={code}`
+- Rate limit: 15 requests per 30 seconds (IP-based)
+- CORS: Enabled for client-side requests
+- Documentation: https://bible-api.com/
+
+**Alternative Considered (Not Implemented):**
+- API.Bible (scripture.api.bible) - Has 2500+ translations including ESV/NKJV
+- Rejected because: Requires API key, daily quotas (5000/day), more complex implementation
+- May revisit if free tier proves insufficient
+
+**Result:** Users get verse text in closest available translation with transparent fallback notifications. No 404 errors.
 
 ## Usage Instructions
 
