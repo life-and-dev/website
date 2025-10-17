@@ -1,6 +1,0 @@
-# Fully static pre-rendered site - no catch-all redirect needed
-# Cloudflare Pages automatically serves static files and shows /404.html for missing pages
-# _routes.json controls routing (see public/_routes.json)
-
-# Add specific redirects below:
-# /old-path /new-path 301
