@@ -22,6 +22,15 @@ export default defineNuxtConfig({
       routes: ['/'],
       crawlLinks: true,
       failOnError: false
+    },
+    cloudflare: {
+      pages: {
+        // Don't generate _redirects for fully static site
+        routes: {
+          include: ['/*'],
+          exclude: []
+        }
+      }
     }
   },
 
