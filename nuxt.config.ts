@@ -27,10 +27,6 @@ export default defineNuxtConfig({
 
   ssr: true,
 
-  experimental: {
-    payloadExtraction: false
-  },
-
   css: [
     '~/assets/css/markdown.css',
     '~/assets/css/print.css'
@@ -49,12 +45,49 @@ export default defineNuxtConfig({
     }
   },
 
+  app: {
+    head: {
+      link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg', sizes: 'any' },
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico', sizes: '32x32' },
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+        { rel: 'manifest', href: '/site.webmanifest' }
+      ]
+    }
+  },
+
   hooks: {
     // Start image watcher when dev server starts
     'ready': async (nuxt) => {
       if (nuxt.options.dev) {
         const { watchImages } = await import('./scripts/watch-images')
         await watchImages()
+      }
+    },
+
+    // Generate favicons before build
+    'build:before': async () => {
+      const domain = process.env.CONTENT || 'ofgod'
+      const { generateFavicons, copyDomainFavicons, generateWebManifest } = await import('./scripts/generate-favicons')
+
+      // Domain name mapping
+      const domainNames: Record<string, string> = {
+        ofgod: 'Our Father God',
+        kingdom: 'The Kingdom of God',
+        son: 'The Son of God',
+        church: 'The Church of God',
+        word: 'The Word of God'
+      }
+
+      const name = domainNames[domain] || domain
+
+      console.log(`\n🎨 Generating favicons for build...`)
+      const success = await generateFavicons(domain)
+
+      if (success) {
+        await copyDomainFavicons(domain)
+        await generateWebManifest(domain, name)
+        console.log(`✅ Favicons ready for ${domain}\n`)
       }
     }
   },
