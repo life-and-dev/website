@@ -23,11 +23,6 @@ const { data: page, pending } = await useAsyncData(
   () => queryCollection('content').path(route.path).first()
 )
 
-// 404 handling
-if (!page.value && !pending.value) {
-  throw createError({ statusCode: 404, statusMessage: 'Page not found' })
-}
-
 // SEO meta tags
 // @nuxt/content v3 automatically extracts title from first H1
 const siteConfig = useSiteConfig()
