@@ -50,6 +50,13 @@ watch(() => props.activePath, (newPath) => {
 function expandPathToActive(path: string) {
   if (!props.tree) return
 
+  // Special case: Homepage (/) - collapse all menus
+  if (path === '/') {
+    expandedIds.value.clear()
+    expandedIds.value = new Set(expandedIds.value)
+    return
+  }
+
   const node = findNodeByPath(path, props.tree)
   if (!node) return
 
@@ -59,6 +66,9 @@ function expandPathToActive(path: string) {
     expandedIds.value.add(current.id)
     current = current.parent
   }
+
+  // Force Vue to detect Set mutations by creating new Set instance
+  expandedIds.value = new Set(expandedIds.value)
 }
 
 /**
@@ -82,6 +92,8 @@ function handleToggle(nodeId: string) {
   if (expandedIds.value.has(nodeId)) {
     // Collapse
     expandedIds.value.delete(nodeId)
+    // Force Vue to detect Set mutation by creating new Set instance
+    expandedIds.value = new Set(expandedIds.value)
   } else {
     // Expand - collapse siblings at same level (Option B behavior)
     const node = findNodeById(nodeId, props.tree)
@@ -96,6 +108,8 @@ function handleToggle(nodeId: string) {
 
     // Expand this node
     expandedIds.value.add(nodeId)
+    // Force Vue to detect Set mutation by creating new Set instance
+    expandedIds.value = new Set(expandedIds.value)
   }
 }
 

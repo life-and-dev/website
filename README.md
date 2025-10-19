@@ -359,46 +359,91 @@ description: Brief page description for SEO and tooltips (optional)
 
 ### Navigation Menu Configuration
 
-**File:** `_menu.yml` (underscore prefix for alphabetical sorting)
+**File:** Single `_menu.yml` per domain at `/content/{domain}/_menu.yml`
 
-**Location:** Place in any directory with multiple pages
+**Format:** Hierarchical YAML array with nested submenus
 
-**Format:**
 ```yaml
-# Local file (same directory as _menu.yml)
-page-slug: .
+# Primary menu item (can be highlighted when active)
+- trinity
 
-# Relative path (subdirectory)
-subdir-page: ./subdirectory
-
-# Absolute path (different directory)
-other-page: /other/directory/page
+# Submenu with children (also primary)
+- trinity:
+  - abraham-3-visitors
+  - Members of the Trinity:        # Header (non-clickable)
+  - 'The Father': https://ofgod.info   # External link
+  - 'The Son': /                   # Alias (never highlighted)
+  - holy-spirit
 
 # Separator (visual divider)
-divider: ---
+-
 
-# External link (quoted key for spaces, opens in new tab)
-'External Site': https://example.com
-'Our Father God': https://ofgod.info
+# Root-level pages
+- about
+- disclaimer
 ```
 
-**Example:** `/content/kingdom/church/_menu.yml`
+**Menu Item Types:**
+
+1. **Primary Items** (string syntax): `- trinity`
+   * Represents actual page location in navigation hierarchy
+   * Gets highlighted when that page is active
+   * Can have children (becomes expandable submenu)
+
+2. **Alias Links** (object syntax): `- 'The Son': /`
+   * Custom-titled shortcut to any page
+   * Never gets highlighted (even when navigating to that page)
+   * Never expandable (always link-only, even if target page has children)
+   * Useful for cross-references within navigation
+
+3. **Headers** (object with null): `- 'Section Name':`
+   * Non-clickable section labels
+   * Uppercase styling, secondary color
+   * Organize menu into logical groups
+
+4. **Separators** (blank): `-`
+   * Visual horizontal dividers
+   * Non-clickable
+
+5. **External Links**: `- 'Title': https://example.com`
+   * Open in new tab with icon indicator
+   * Never highlighted
+
+**Path Resolution:**
 ```yaml
-history: .          # Links to /church/history.md
-modifications: .    # Links to /church/modifications.md
+- page                  # Relative: /page
+- ./sub/page            # Current dir: /sub/page
+- /about                # Absolute: /about
+- folder:               # Submenu
+  - child               # Relative to /folder: /folder/child
+  - ../sibling          # Parent dir: /sibling
+  - /root-page          # Absolute: /root-page
 ```
+
+**Primary vs Alias Example:**
+```yaml
+- trinity:              # Primary (highlighted when viewing /trinity)
+  - 'The Son': /        # Alias to homepage (NOT highlighted when viewing /)
+  - holy-spirit         # Primary (highlighted when viewing /trinity/holy-spirit)
+```
+
+**When viewing `/trinity/holy-spirit`:**
+* ✅ "holy-spirit" item is highlighted (primary)
+* ❌ "The Son" is NOT highlighted (alias)
+* ✅ "trinity" parent is expanded (auto-expand to active page)
+
+**Homepage Behavior:**
+* Navigating to `/` (homepage) collapses all menus
+* No menu items are highlighted (homepage has no primary menu item)
 
 **Ordering:**
 * Menu items display in **exact order** listed in `_menu.yml`
-* External links show "open in new" icon and open in new browser tab
-* Separators display as visual dividers (non-clickable)
 * Unlisted `.md` files appear at bottom, sorted alphabetically by H1 title
 * Missing `_menu.yml` → all files sorted alphabetically
 
-**Generation:**
-* Migration script auto-generates `_menu.yml` from Grav folder numbering
-* Manually edit to reorder or add external links
-* Changes auto-sync during development
+**Auto-Sync:**
+* Changes to `_menu.yml` auto-sync during development
+* File watcher copies from `/content/{domain}/` to `/public/`
 
 ## Local Development Setup
 

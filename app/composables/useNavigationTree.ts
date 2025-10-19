@@ -8,6 +8,8 @@ export interface TreeNode {
   externalUrl?: string
   isExternal?: boolean
   isSeparator?: boolean
+  isHeader?: boolean
+  isPrimary?: boolean  // Marks primary menu items (string/array syntax, not aliases)
   description?: string
   keywords?: string[]
 }
@@ -16,13 +18,22 @@ export interface TreeNode {
  * Build hierarchical navigation tree from @nuxt/content collection
  */
 export function useNavigationTree() {
-  const tree = ref<TreeNode | null>(null)
-  const isLoading = ref(false)
+  // Use useState for server-side rendering and client hydration
+  const tree = useState<TreeNode | null>('navigation-tree', () => null)
+  // Use useState for loading state to prevent duplicate fetches across components
+  const isLoading = useState<boolean>('navigation-tree-loading', () => false)
 
   /**
    * Load navigation tree from content collection
+   * Uses cached tree if available to avoid rebuilding on every navigation
+   * Prevents concurrent fetches when multiple components mount simultaneously
    */
   async function loadTree() {
+    // Return if already loaded OR currently loading (prevents race condition)
+    if (tree.value !== null || isLoading.value) {
+      return
+    }
+
     isLoading.value = true
     try {
       const pages = await queryCollection('content').all()
@@ -44,6 +55,21 @@ export function useNavigationTree() {
 
     for (const child of node.children) {
       const found = findNodeByPath(path, child)
+      if (found) return found
+    }
+
+    return null
+  }
+
+  /**
+   * Find primary node by path in tree (only returns nodes with isPrimary=true)
+   */
+  function findPrimaryNodeByPath(path: string, node: TreeNode | null = tree.value): TreeNode | null {
+    if (!node) return null
+    if (node.path === path && node.isPrimary) return node
+
+    for (const child of node.children) {
+      const found = findPrimaryNodeByPath(path, child)
       if (found) return found
     }
 
@@ -78,6 +104,7 @@ export function useNavigationTree() {
     isLoading,
     loadTree,
     findNodeByPath,
+    findPrimaryNodeByPath,
     getAncestorPaths,
     getSiblings
   }
@@ -163,12 +190,13 @@ async function buildTreeFromPages(pages: any[]): Promise<TreeNode> {
   // Second pass: read menu.yml files and update order (also creates external nodes and separators)
   await applyMenuOrdering(nodeMap, root)
 
-  // Third pass: build tree structure
+  // Third pass: build tree structure for nodes NOT already processed by menu ordering
+  // (Menu-ordered nodes already have parent/children relationships set)
   for (const [path, node] of nodeMap) {
     if (path === '/') continue
 
-    // Skip nodes that already have a parent (external links and separators attached in applyMenuOrdering)
-    if (node.parent) continue
+    // Skip nodes already processed by menu ordering (have parent set) or special nodes
+    if (node.parent || node.isExternal || node.isSeparator || node.isHeader) continue
 
     // Find parent path
     const segments = path.split('/').filter(Boolean)
@@ -179,11 +207,16 @@ async function buildTreeFromPages(pages: any[]): Promise<TreeNode> {
     const parent = nodeMap.get(parentPath)
     if (parent) {
       node.parent = parent
-      parent.children.push(node)
+      // Only add to children if not already there (avoid duplicates)
+      if (!parent.children.includes(node)) {
+        parent.children.push(node)
+      }
     } else {
       // Orphaned node, attach to root
       node.parent = root
-      root.children.push(node)
+      if (!root.children.includes(node)) {
+        root.children.push(node)
+      }
     }
   }
 
@@ -194,128 +227,381 @@ async function buildTreeFromPages(pages: any[]): Promise<TreeNode> {
 }
 
 /**
- * Apply menu.yml ordering to nodes
+ * Menu item type definitions
+ */
+type MenuItemType = string | { [key: string]: string | null | MenuItemType[] } | null
+
+/**
+ * Parse hierarchical YAML menu into tree structure
  */
 async function applyMenuOrdering(nodeMap: Map<string, TreeNode>, root: TreeNode) {
-  // Get content domain from runtime config
-  const config = useRuntimeConfig()
-  const contentDomain = config.public.contentDomain || 'eternal'
+  try {
+    // Fetch root _menu.yml from /public/
+    const menuContent = await $fetch<string>('/_menu.yml', {
+      parseResponse: txt => txt,
+      headers: { 'Accept': 'text/yaml, text/plain' }
+    }).catch(() => null)
 
-  // Group nodes by parent directory to find which directories have menu.yml
-  const dirGroups = new Map<string, TreeNode[]>()
-
-  for (const [path, node] of nodeMap) {
-    if (path === '/') continue
-
-    const segments = path.split('/').filter(Boolean)
-    const parentPath = segments.length === 1 ? '/' : '/' + segments.slice(0, -1).join('/')
-
-    if (!dirGroups.has(parentPath)) {
-      dirGroups.set(parentPath, [])
+    if (!menuContent) {
+      // No menu file - sort all nodes alphabetically
+      sortNodesAlphabetically(nodeMap, root)
+      return
     }
-    dirGroups.get(parentPath)!.push(node)
+
+    // Parse YAML array (basic parser for nested structure)
+    const menuItems = parseYamlMenu(menuContent)
+
+    // Track which nodes have been ordered
+    const orderedNodes = new Set<TreeNode>()
+
+    // Process menu items recursively
+    let order = 0
+    processMenuItems(menuItems, root, nodeMap, orderedNodes, order, '/')
+
+    // Add unlisted nodes alphabetically at the end
+    addUnlistedNodes(nodeMap, root, orderedNodes)
+
+  } catch (error) {
+    console.error('Error applying menu ordering:', error)
+    sortNodesAlphabetically(nodeMap, root)
+  }
+}
+
+/**
+ * Check if node is an ancestor of potentialDescendant
+ */
+function isAncestor(node: TreeNode, potentialDescendant: TreeNode): boolean {
+  let current: TreeNode | undefined = potentialDescendant
+  while (current) {
+    if (current === node) return true
+    current = current.parent
+  }
+  return false
+}
+
+/**
+ * Process menu items recursively and build tree structure
+ */
+function processMenuItems(
+  items: MenuItemType[],
+  parent: TreeNode,
+  nodeMap: Map<string, TreeNode>,
+  orderedNodes: Set<TreeNode>,
+  startOrder: number,
+  contextPath: string
+): number {
+  let order = startOrder
+
+  for (const item of items) {
+    // Handle null/blank (separator)
+    if (item === null || item === '') {
+      const separatorId = `separator-${order}`
+      const separatorPath = contextPath === '/' ? `/__${separatorId}` : `${contextPath}/__${separatorId}`
+      const separator: TreeNode = {
+        id: separatorId,
+        title: '---',
+        path: separatorPath,
+        order: order++,
+        children: [],
+        isSeparator: true,
+        parent: parent
+      }
+      nodeMap.set(separatorPath, separator)
+      parent.children.push(separator)
+      orderedNodes.add(separator)
+      continue
+    }
+
+    // Handle string (page path)
+    if (typeof item === 'string') {
+      const resolvedPath = resolvePath(item, contextPath)
+      const node = nodeMap.get(resolvedPath)
+
+      if (node && !orderedNodes.has(node)) {
+        // Prevent circular references (e.g., adding root as child of a submenu)
+        if (isAncestor(node, parent)) {
+          console.warn(`Circular reference prevented: ${node.path} cannot be child of ${parent.path}`)
+          continue
+        }
+
+        node.order = order++
+        node.parent = parent
+        node.isPrimary = true  // Mark as primary menu item
+        if (!parent.children.includes(node)) {
+          parent.children.push(node)
+        }
+        orderedNodes.add(node)
+      } else if (!node) {
+        console.warn(`Menu item not found: ${item} (resolved: ${resolvedPath})`)
+      }
+      continue
+    }
+
+    // Handle object (custom title, external link, header, or submenu)
+    if (typeof item === 'object') {
+      for (const [key, value] of Object.entries(item)) {
+        // Handle null value (header)
+        if (value === null || value === '') {
+          const headerId = `header-${order}`
+          const headerPath = contextPath === '/' ? `/__${headerId}` : `${contextPath}/__${headerId}`
+          const header: TreeNode = {
+            id: headerId,
+            title: key,
+            path: headerPath,
+            order: order++,
+            children: [],
+            isHeader: true,
+            parent: parent
+          }
+          nodeMap.set(headerPath, header)
+          parent.children.push(header)
+          orderedNodes.add(header)
+          continue
+        }
+
+        // Handle external URL
+        if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+          const externalId = `external-${key}`
+          const external: TreeNode = {
+            id: externalId,
+            title: key,
+            path: value,
+            order: order++,
+            children: [],
+            externalUrl: value,
+            isExternal: true,
+            parent: parent
+          }
+          nodeMap.set(value, external)
+          parent.children.push(external)
+          orderedNodes.add(external)
+          continue
+        }
+
+        // Handle submenu (array value)
+        if (Array.isArray(value)) {
+          // Find the parent node for this submenu
+          const submenuPath = resolvePath(key, contextPath)
+          const submenuNode = nodeMap.get(submenuPath)
+
+          if (submenuNode && !orderedNodes.has(submenuNode)) {
+            submenuNode.order = order++
+            submenuNode.parent = parent
+            submenuNode.isPrimary = true  // Mark submenu parent as primary
+            if (!parent.children.includes(submenuNode)) {
+              parent.children.push(submenuNode)
+            }
+            orderedNodes.add(submenuNode)
+
+            // Process children recursively
+            order = processMenuItems(value, submenuNode, nodeMap, orderedNodes, 0, submenuPath)
+          } else if (!submenuNode) {
+            console.warn(`Submenu parent not found: ${key} (resolved: ${submenuPath})`)
+          }
+          continue
+        }
+
+        // Handle custom title with path
+        if (typeof value === 'string') {
+          const resolvedPath = resolvePath(value, contextPath)
+          const node = nodeMap.get(resolvedPath)
+
+          if (node && !orderedNodes.has(node)) {
+            // Always create a link-only node for custom titled links
+            // This prevents expansion even if the target page has children
+            const linkNode: TreeNode = {
+              id: `link-${key.replace(/\s+/g, '-').toLowerCase()}-${order}`,
+              title: key,
+              path: resolvedPath,
+              order: order++,
+              children: [],  // No children - never expandable
+              parent: parent,
+              isExternal: false,
+              isPrimary: false,  // Aliases are NOT primary
+              description: node.description,  // Copy description for tooltips
+              keywords: node.keywords  // Copy keywords for search
+            }
+            parent.children.push(linkNode)
+            orderedNodes.add(linkNode)
+          } else if (!node) {
+            console.warn(`Menu item not found: ${key} -> ${value} (resolved: ${resolvedPath})`)
+          }
+        }
+      }
+    }
   }
 
-  // Read menu.yml for each directory
-  for (const [dirPath, nodes] of dirGroups) {
-    try {
-      const menuPath = dirPath === '/'
-        ? `/_menu.yml`
-        : `${dirPath}/_menu.yml`
+  return order
+}
 
-      // Try to fetch _menu.yml content from /public/ (static file)
-      const menuContent = await $fetch<string>(menuPath, {
-        parseResponse: txt => txt,
-        headers: { 'Accept': 'text/yaml, text/plain' }
-      }).catch(() => null)
+/**
+ * Resolve relative/absolute paths in menu
+ */
+function resolvePath(path: string, contextPath: string): string {
+  // Absolute path
+  if (path.startsWith('/')) {
+    return path
+  }
 
-      const orderedNodes = new Set<TreeNode>()
+  // Parent directory (..)
+  if (path.startsWith('../')) {
+    const contextSegments = contextPath.split('/').filter(Boolean)
+    contextSegments.pop() // Remove last segment
+    const relativePart = path.substring(3) // Remove '../'
+    return contextSegments.length > 0
+      ? `/${contextSegments.join('/')}/${relativePart}`
+      : `/${relativePart}`
+  }
 
-      if (menuContent) {
-        // Parse YAML manually (simple key: value format)
-        const menuLines = menuContent.split('\n').filter(line => line.trim() && !line.trim().startsWith('#'))
-        let order = 0
+  // Current directory (./)
+  if (path.startsWith('./')) {
+    const relativePart = path.substring(2)
+    return contextPath === '/' ? `/${relativePart}` : `${contextPath}/${relativePart}`
+  }
 
-        for (const line of menuLines) {
-          const colonIndex = line.indexOf(':')
-          if (colonIndex === -1) continue
+  // Relative to context (no prefix)
+  return contextPath === '/' ? `/${path}` : `${contextPath}/${path}`
+}
 
-          const key = line.substring(0, colonIndex).trim().replace(/^['"]|['"]$/g, '')
-          const value = line.substring(colonIndex + 1).trim().replace(/^['"]|['"]$/g, '')
+/**
+ * Parse YAML menu into nested array structure
+ */
+function parseYamlMenu(content: string): MenuItemType[] {
+  const lines = content.split('\n')
+  const root: MenuItemType[] = []
+  const stack: { indent: number, array: MenuItemType[] }[] = [{ indent: -1, array: root }]
 
-          let node: TreeNode | undefined
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (!line) continue
 
-          // Determine node resolution based on value
-          if (value.includes('---')) {
-            // Separator - create non-clickable divider node
-            // Use dirPath as the separator's path so it can be properly placed in the tree
-            const separatorPath = dirPath === '/' ? `/__separator-${key}` : `${dirPath}/__separator-${key}`
-            const parent = nodeMap.get(dirPath) || root
-            node = {
-              id: `separator-${key}`,
-              title: '---',
-              path: separatorPath,
-              order: order++,
-              children: [],
-              isSeparator: true,
-              parent: parent
-            }
-            nodeMap.set(separatorPath, node)
-            parent.children.push(node)
-            orderedNodes.add(node)
-            continue
-          } else if (value.startsWith('http://') || value.startsWith('https://')) {
-            // External URL - create new node
-            const parent = nodeMap.get(dirPath) || root
-            node = {
-              id: key,
-              title: key,
-              path: value,
-              order: order++,
-              children: [],
-              externalUrl: value,
-              isExternal: true,
-              parent: parent
-            }
-            nodeMap.set(value, node)
-            parent.children.push(node)
-            orderedNodes.add(node)
-            continue
-          } else if (value.startsWith('/')) {
-            // Absolute path
-            node = nodeMap.get(value)
-          } else if (value === '.' || value.startsWith('./')) {
-            // Relative path
-            const resolvedPath = value === '.'
-              ? (dirPath === '/' ? `/${key}` : `${dirPath}/${key}`)
-              : (dirPath === '/' ? `/${value.substring(2)}` : `${dirPath}/${value.substring(2)}`)
-            node = nodeMap.get(resolvedPath)
-          } else if (!value || value === key) {
-            // Legacy format or empty value: slug.md in same directory
-            node = nodes.find(n => n.id === key || n.path.endsWith(`/${key}`))
+    // Skip empty lines and comments
+    if (!line.trim() || line.trim().startsWith('#')) {
+      continue
+    }
+
+    // Measure indentation
+    const indent = line.search(/\S/)
+    const trimmed = line.trim()
+
+    // Pop stack to find correct parent level
+    while (stack.length > 1) {
+      const topLevel = stack[stack.length - 1]
+      if (!topLevel || topLevel.indent < indent) break
+      stack.pop()
+    }
+
+    const currentLevel = stack[stack.length - 1]
+    if (!currentLevel) continue
+    const currentArray = currentLevel.array
+
+    // Handle array item marker (-)
+    if (trimmed.startsWith('- ')) {
+      const content = trimmed.substring(2).trim()
+
+      // Empty array item (separator)
+      if (!content) {
+        currentArray.push(null)
+        continue
+      }
+
+      // Check for key: value or key:
+      const colonIndex = content.indexOf(':')
+
+      if (colonIndex === -1) {
+        // Plain string value
+        currentArray.push(content)
+      } else {
+        // Object with key: value
+        const key = content.substring(0, colonIndex).trim().replace(/^['"]|['"]$/g, '')
+        let value = content.substring(colonIndex + 1).trim().replace(/^['"]|['"]$/g, '')
+
+        if (!value) {
+          // No value - check if next line is indented (has children) or same level (header)
+          const nextLine = lines[i + 1]
+          const hasChildren = nextLine !== undefined && nextLine.search(/\S/) > indent
+
+          if (hasChildren) {
+            // Key with children - will have nested items on next lines
+            const obj: { [key: string]: MenuItemType[] } = { [key]: [] }
+            currentArray.push(obj)
+            stack.push({ indent: indent, array: obj[key] as MenuItemType[] })
+          } else {
+            // Header - key with no value and no children
+            currentArray.push({ [key]: null })
           }
+        } else {
+          // Key with value
+          currentArray.push({ [key]: value })
+        }
+      }
+    } else if (trimmed.includes(':')) {
+      // Standalone key: value (child of previous array item)
+      const colonIndex = trimmed.indexOf(':')
+      const key = trimmed.substring(0, colonIndex).trim().replace(/^['"]|['"]$/g, '')
+      const value = trimmed.substring(colonIndex + 1).trim().replace(/^['"]|['"]$/g, '')
 
-          if (node) {
-            node.order = order++
-            orderedNodes.add(node)
+      // This should be a child of the last array item
+      if (currentArray.length > 0) {
+        const lastItem = currentArray[currentArray.length - 1]
+        if (typeof lastItem === 'object' && lastItem !== null && !Array.isArray(lastItem)) {
+          // Add to existing object
+          if (!value) {
+            const childArray: MenuItemType[] = []
+            lastItem[key] = childArray
+            stack.push({ indent: indent, array: childArray })
+          } else {
+            lastItem[key] = value
           }
         }
       }
+    }
+  }
 
-      // Add unlisted nodes alphabetically at the end
-      const unlistedNodes = nodes.filter(n => !orderedNodes.has(n) && !n.isExternal)
-      if (unlistedNodes.length > 0) {
-        unlistedNodes.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
-        let unlistedOrder = orderedNodes.size > 0 ? orderedNodes.size : 0
-        for (const node of unlistedNodes) {
-          node.order = unlistedOrder++
-        }
+  return root
+}
+
+/**
+ * Sort all nodes alphabetically (fallback when no menu exists)
+ */
+function sortNodesAlphabetically(nodeMap: Map<string, TreeNode>, root: TreeNode) {
+  const nodes = Array.from(nodeMap.values()).filter(n => n.path !== '/')
+  nodes.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+  nodes.forEach((node, index) => {
+    node.order = index
+  })
+}
+
+/**
+ * Add nodes not listed in menu alphabetically at the end
+ */
+function addUnlistedNodes(nodeMap: Map<string, TreeNode>, root: TreeNode, orderedNodes: Set<TreeNode>) {
+  const unlistedNodes = Array.from(nodeMap.values()).filter(
+    n => !orderedNodes.has(n) && !n.isExternal && !n.isSeparator && !n.isHeader && n.path !== '/'
+  )
+
+  if (unlistedNodes.length > 0) {
+    unlistedNodes.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+
+    // Group unlisted nodes by parent
+    const byParent = new Map<string, TreeNode[]>()
+    for (const node of unlistedNodes) {
+      const segments = node.path.split('/').filter(Boolean)
+      const parentPath = segments.length === 1 ? '/' : '/' + segments.slice(0, -1).join('/')
+
+      if (!byParent.has(parentPath)) {
+        byParent.set(parentPath, [])
       }
-    } catch (error) {
-      // Menu file doesn't exist - sort all nodes alphabetically
-      nodes.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+      byParent.get(parentPath)!.push(node)
+    }
+
+    // Assign order to unlisted nodes
+    for (const [parentPath, nodes] of byParent) {
+      const parent = nodeMap.get(parentPath) || root
+      const maxOrder = parent.children.reduce((max, child) => Math.max(max, child.order), -1)
+
       nodes.forEach((node, index) => {
-        node.order = index
+        node.order = maxOrder + index + 1
       })
     }
   }
@@ -324,9 +610,16 @@ async function applyMenuOrdering(nodeMap: Map<string, TreeNode>, root: TreeNode)
 /**
  * Recursively sort tree children by order
  */
-function sortTreeChildren(node: TreeNode) {
+function sortTreeChildren(node: TreeNode, visited = new Set<TreeNode>()) {
+  // Prevent infinite recursion from circular references
+  if (visited.has(node)) {
+    console.warn('Circular reference detected in tree structure:', node.path)
+    return
+  }
+  visited.add(node)
+
   node.children.sort((a, b) => a.order - b.order)
   for (const child of node.children) {
-    sortTreeChildren(child)
+    sortTreeChildren(child, visited)
   }
 }

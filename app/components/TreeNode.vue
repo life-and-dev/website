@@ -6,6 +6,15 @@
       :style="{ marginLeft: `${depth * 1.25}rem`, marginTop: '0.5rem', marginBottom: '0.5rem', marginRight: '0.5rem' }"
     />
 
+    <!-- Header rendering (non-clickable section label) -->
+    <div
+      v-else-if="node.isHeader"
+      class="tree-header"
+      :style="{ paddingLeft: `${depth * 1.25}rem` }"
+    >
+      <span class="header-title">{{ node.title }}</span>
+    </div>
+
     <div
       v-else
       class="tree-node"
@@ -105,9 +114,16 @@ const emit = defineEmits<{
   select: [path: string]
 }>()
 
-const hasChildren = computed(() => props.node.children && props.node.children.length > 0)
+const hasChildren = computed(() => {
+  return props.node.children && props.node.children.length > 0
+})
+
 const isExpanded = computed(() => props.expandedIds.has(props.node.id))
-const isActive = computed(() => props.node.path === props.activePath)
+const isActive = computed(() => {
+  // Only primary menu items can be highlighted
+  // Aliases (custom titled links) should never be highlighted
+  return props.node.isPrimary === true && props.node.path === props.activePath
+})
 
 // Shared tooltip configuration
 const tooltip = useTooltipConfig()
@@ -123,6 +139,12 @@ function handleSelect() {
     return
   }
 
+  // For parent nodes: toggle expansion AND navigate
+  if (hasChildren.value) {
+    emit('toggle', props.node.id)
+  }
+
+  // Navigate to the page
   emit('select', props.node.path)
 }
 </script>
@@ -150,6 +172,25 @@ function handleSelect() {
 .tree-node.is-active {
   background-color: rgb(var(--v-theme-selectable));
   color: rgb(var(--v-theme-on-selected));
+}
+
+.tree-header {
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.75rem 0.5rem 0.25rem 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.header-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface-appbar));
+  text-transform: uppercase;
+  letter-spacing: 0.05rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chevron-button {

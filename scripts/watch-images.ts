@@ -82,13 +82,11 @@ export async function copyAllImages() {
     }
   }
 
-  // Copy _menu.yml files
-  const menuFiles = await getAllFiles(sourceDir, 'yml')
-  for (const sourcePath of menuFiles) {
-    if (path.basename(sourcePath) === MENU_FILE) {
-      await copyMenuFile(sourcePath, false)
-      copiedCount++
-    }
+  // Copy root _menu.yml file only (hierarchical menu)
+  const rootMenuPath = path.join(sourceDir, MENU_FILE)
+  if (await fs.pathExists(rootMenuPath)) {
+    await copyMenuFile(rootMenuPath, false)
+    copiedCount++
   }
 
   // Copy favicon files
@@ -149,7 +147,7 @@ export async function watchImages() {
 
   const patterns = [
     ...IMAGE_EXTS.map(ext => `${sourceDir}/**/*.${ext}`),
-    `${sourceDir}/**/${MENU_FILE}`
+    `${sourceDir}/${MENU_FILE}` // Only watch root menu file
   ]
 
   const watcher = chokidar.watch(patterns, {

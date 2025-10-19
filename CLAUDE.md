@@ -205,24 +205,207 @@ async function isDraftOnlyImage(imagePath: string): Promise<boolean> {
 ### Frontmatter-Free Markdown (2025-10-09)
 **Solution:** H1-based titles (first `# Title` becomes page title), `.draft.md` extensions for unpublished content. TOC always skips H1, shows H2-H3 only.
 
-### Menu-Based Navigation (2025-10-09, updated 2025-10-16)
-**Implementation:** `_menu.yml` files define order (fetched from `/public/` as static files)
-- Syntax: `slug: .` (local), `slug: ./sub` (relative), `slug: /path` (absolute), `'Title': http://url` (external), `key: ---` (separator)
-- External links open in new tab with security attributes (`noopener,noreferrer`)
-- External links show open-in-new icon for visual indication
-- Unlisted files appended alphabetically by H1 title
-- Auto-synced by image watcher
+### Navigation Menu Loading State Lock (2025-10-19)
+**Problem:** The `_menu.yml` file was being fetched **twice** on initial page load, wasting bandwidth and causing duplicate processing.
 
-**External Link Support (2025-10-16):**
-```yaml
-# _menu.yml format
-'Our Father God': https://ofgod.info
-'The Kingdom': https://kingdom.ofgod.info
+**Root Cause:** The layout renders both desktop and mobile `<AppNavigation>` components. Both components call `loadTree()` in their `onMounted()` hooks, and both mount at nearly the same time. This created a race condition:
+1. Desktop component mounts → checks cache (null) → starts fetching
+2. Mobile component mounts (microseconds later) → checks cache (still null) → starts fetching
+3. Result: Two simultaneous HTTP requests for the same `_menu.yml` file
+
+**Solution:** Use shared loading state with `useState` to prevent concurrent fetches:
+
+```typescript
+// ❌ WRONG - Each component has separate loading state
+const isLoading = ref(false)
+
+// ✅ CORRECT - Shared loading state across all components
+const isLoading = useState<boolean>('navigation-tree-loading', () => false)
+
+async function loadTree() {
+  // Guard: Skip if already loaded OR currently loading
+  if (tree.value !== null || isLoading.value) {
+    return
+  }
+  // ... fetch logic
+}
 ```
-- Creates TreeNode with `isExternal: true` and `externalUrl` properties
-- Click handler opens link in new window instead of Vue Router navigation
-- Attached directly to parent during menu parsing (not in tree build pass)
-- Visual indicator: `mdi-open-in-new` icon appears next to title
+
+**Implementation:**
+- [useNavigationTree.ts:23](app/composables/useNavigationTree.ts#L23) - Changed `isLoading` from `ref` to `useState` with unique key
+- [useNavigationTree.ts:32](app/composables/useNavigationTree.ts#L32) - Added `|| isLoading.value` to cache check
+
+**How It Works:**
+1. First component mounts → sets `isLoading.value = true` → starts fetch
+2. Second component mounts → sees `isLoading.value = true` → returns early (no fetch)
+3. First fetch completes → sets `tree.value` and `isLoading.value = false`
+4. Both components share the same cached tree via `useState`
+
+**Result:** Only **1 HTTP request** for `/_menu.yml` on initial page load, down from 2. Subsequent navigations: 0 requests (tree cached).
+
+### Navigation Menu Expansion Reactivity Fix (2025-10-19)
+**Problem:** Submenu nodes (e.g., Trinity) wouldn't expand when clicking the chevron button. The `expandedIds` Set was being mutated but Vue wasn't detecting the changes.
+
+**Root Cause:** Vue 3's reactivity system uses Proxy-based tracking. When using `Set.add()` or `Set.delete()` methods on a reactive ref, Vue doesn't detect these mutations because Set methods mutate internal state without triggering the reactive proxy's setter.
+
+**Solution:** Force Vue to detect Set changes by creating a new Set instance after every mutation:
+
+```typescript
+// ❌ WRONG - Vue won't detect this change
+expandedIds.value.add(nodeId)
+
+// ✅ CORRECT - Creating new Set triggers Vue's reactive setter
+expandedIds.value.add(nodeId)
+expandedIds.value = new Set(expandedIds.value)
+```
+
+**Implementation:**
+- [NavigationTree.vue:84-118](app/components/NavigationTree.vue#L84-L118) - Added `new Set()` reassignment in `handleToggle()` after both expand and collapse operations
+- [NavigationTree.vue:50-65](app/components/NavigationTree.vue#L50-L65) - Added `new Set()` reassignment in `expandPathToActive()` after auto-expanding ancestors
+
+**How It Works:**
+1. User clicks chevron → `handleToggle(nodeId)` is called
+2. Function mutates Set: `expandedIds.value.add(nodeId)`
+3. Reassign with new Set: `expandedIds.value = new Set(expandedIds.value)`
+4. Vue detects ref assignment → triggers reactive updates
+5. TreeNode components re-render with updated `isExpanded` computed
+
+**Result:** Menu expansion/collapse works correctly. This is a standard Vue 3 pattern for working with Sets and Maps in reactive refs.
+
+### Primary vs Alias Menu Items (2025-10-19)
+**Problem:** Multiple menu items could link to the same page (e.g., "Trinity" as parent node, "The Son" linking to `/`). Which item should be highlighted when navigating to that page?
+
+**Solution:** Distinguish between **primary** menu items (actual page locations) and **aliases** (custom-titled shortcuts). Only primary items can be highlighted.
+
+**Implementation:**
+```typescript
+// TreeNode interface - isPrimary flag
+export interface TreeNode {
+  id: string
+  title: string
+  path: string
+  isPrimary?: boolean  // Only true for string/array syntax items
+  // ...
+}
+
+// Mark primary items during menu processing
+if (typeof item === 'string') {
+  node.isPrimary = true  // String syntax: - trinity
+}
+if (Array.isArray(value)) {
+  submenuNode.isPrimary = true  // Array syntax: - trinity:
+}
+if (typeof value === 'string') {
+  linkNode.isPrimary = false  // Alias: - 'The Son': /
+}
+
+// Only highlight primary items
+const isActive = computed(() => {
+  return props.node.isPrimary === true && props.node.path === props.activePath
+})
+```
+
+**Rules:**
+- **Primary items** (`- trinity` or `- trinity:`) → Can be highlighted when active
+- **Alias items** (`- 'The Son': /`) → Never highlighted, just navigation shortcuts
+- **Homepage** (`/`) → Collapses all menus, highlights nothing
+
+**Files Changed:**
+- [useNavigationTree.ts](app/composables/useNavigationTree.ts) - Added `isPrimary` flag, marking logic, `findPrimaryNodeByPath()` helper
+- [TreeNode.vue](app/components/TreeNode.vue) - Updated `isActive` computed to check `isPrimary`
+- [NavigationTree.vue](app/components/NavigationTree.vue) - Added homepage special case (collapse all menus)
+
+**Result:** Clear distinction prevents ambiguity when multiple menu items point to the same page. Only the primary location gets highlighted.
+
+### Hierarchical Menu System (2025-10-19)
+**Problem:** Menu files were scattered across subdirectories (`/content/{domain}/**/_menu.yml`), making it hard to visualize and maintain the full navigation structure.
+
+**Solution:** Consolidated to **single `_menu.yml` per domain** with nested YAML array syntax supporting headers, separators, submenus, and all path types.
+
+**New Format (`/content/{domain}/_menu.yml`):**
+```yaml
+- trinity:                         # Submenu with children
+  - abraham-3-visitors             # Relative page: /trinity/abraham-3-visitors
+  - Members of the Trinity:        # Header (non-clickable label)
+  - 'The Father': https://ofgod.info      # External link
+  - 'The Son': https://son.ofgod.info    # External link
+  - holy-spirit                    # Relative page: /trinity/holy-spirit
+-                                  # Separator (blank line)
+- about                            # Root-level page: /about
+- disclaimer                       # Root-level page: /disclaimer
+- edit                             # Root-level page: /edit
+```
+
+**Path Resolution Examples:**
+```yaml
+- page                  # Relative: /page
+- ./sub/page            # Current dir: /sub/page
+- /about                # Absolute: /about
+- folder:               # Submenu with children
+  - child               # Relative to /folder: /folder/child
+  - ../sibling          # Parent dir: /sibling
+  - /root-page          # Absolute: /root-page
+```
+
+**Note:** Avoid circular references (e.g., adding `/` as a child of a submenu).
+
+**Syntax Rules:**
+- **String**: `- trinity` → Primary menu item (can be highlighted when active)
+- **Object with value**: `- 'Title': path` → Alias link (never highlighted, never expandable)
+- **Object with null**: `- 'Header Text':` → Non-clickable section header
+- **Nested array**: `- trinity:` with children → Primary submenu (can be highlighted)
+- **Blank/null**: `-` → Horizontal separator divider
+- **Relative paths**: `../edit` (parent), `./page` (current), `/page` (root)
+- **External URLs**: `https://...` → Opens in new tab with icon
+
+**Implementation:**
+- [useNavigationTree.ts](app/composables/useNavigationTree.ts) - Complete rewrite with hierarchical YAML parser
+  - `parseYamlMenu()` - Look-ahead logic distinguishes headers from submenus
+  - `processMenuItems()` - Recursively builds tree from nested arrays
+  - `resolvePath()` - Handles `../`, `./`, and `/` path resolution
+  - **Performance**: Uses `useState` for SSR caching - menu built once, reused for all navigations
+  - Menu only fetched on initial page load, then cached in Nuxt payload
+- [TreeNode.vue](app/components/TreeNode.vue#L9-L16) - Added header rendering (uppercase, secondary color, non-clickable)
+- [watch-images.ts](scripts/watch-images.ts#L85-L90) - Only watches root `_menu.yml` (not subdirectories)
+- [migrate-menu.ts](scripts/migrate-menu.ts) - Migration utility to consolidate old scattered menus
+
+**Performance Optimization (2025-10-19):**
+- Menu tree built **once** on initial page load
+- Navigation tree cached in `useState` - shared across all components
+- Loading state lock prevents duplicate fetches when both desktop/mobile navigation components mount
+- Initial load: **1 HTTP request** for `/_menu.yml`
+- Subsequent navigations: **0 HTTP requests** (tree cached in memory)
+- Tree serialized in SSR payload and hydrated on client
+
+**Migration:**
+```bash
+# Consolidate scattered menu files
+npm run migrate:menu -- --domain=son
+
+# Review generated menu
+cat content/son/_menu.yml
+
+# Delete old subdirectory menus
+rm content/son/trinity/_menu.yml
+
+# Test navigation
+CONTENT=son npm run dev
+```
+
+**Visual Features:**
+- **Headers**: Uppercase, small font, secondary color, non-clickable
+- **Separators**: Horizontal dividers between menu sections
+- **External Links**: Show `mdi-open-in-new` icon
+- **Submenus**: Expand/collapse with chevron, auto-expand to active page
+
+**Benefits:**
+- ✅ Single source of truth per domain
+- ✅ Full structure visible at once
+- ✅ Headers to organize sections
+- ✅ All path types supported
+- ✅ DRY principle compliance
+
+**Result:** Cleaner, more maintainable navigation with enhanced organizational features.
 
 ### SEO & Tooltips (2025-10-10)
 **Features:**
@@ -516,10 +699,9 @@ CONTENT=word npm run generate     # → deploy to word.ofgod.info
 │       ├── draft.draft.md           # Unpublished page
 │       └── page.image.jpg           # Images co-located
 ├── public/                          # Auto-generated (gitignored)
-│   ├── _menu.yml                    # Auto-copied from /content/
+│   ├── _menu.yml                    # Auto-copied from /content/ (root only)
 │   ├── page.image.jpg               # Auto-copied from /content/
 │   └── church/
-│       ├── _menu.yml                # Subdirectory menus
 │       └── image.jpg                # Domain prefix stripped
 ├── scripts/
 │   ├── migrate-grav.ts              # Grav migration (pages + images + menus)
@@ -642,7 +824,8 @@ export CONTENT=church; npm run dev  # Sets for session
 - Check console for "📦 Copying images and menus from:" message
 - Check console for "👀 Watching images and menus in:" message
 - Restart dev server if watcher doesn't start
-- Verify files copied: `ls /public/church/history/` should show `_menu.yml`
+- Verify root menu copied: `ls /public/` should show `_menu.yml`
+- Note: Only root `_menu.yml` is copied (subdirectory menus no longer used)
 
 ### Images Not Appearing (404 errors)
 - **Check URL structure**: Images should be at `/church/history/image.jpg` (no domain prefix)
@@ -722,6 +905,27 @@ provide('generateTOC', () => {
 ```
 
 **Key Insight:** `onUpdated()` is the standard Vue pattern for "run code after component updates". Fires reliably after ContentRenderer finishes rendering.
+
+### Navigation Menu Not Expanding (2025-10-19)
+**Problem:** Submenu items (e.g., Trinity) won't expand when clicking the chevron button. Menu shows children exist but nothing happens on click.
+
+**Root Cause:** Vue 3 doesn't automatically detect mutations to Set/Map objects inside reactive refs. The `expandedIds` Set was being mutated but Vue's reactivity system didn't trigger re-renders.
+
+**Solution:** Reassign the ref with a new Set instance after mutations (see Architecture Decisions → Navigation Menu Expansion Reactivity Fix).
+
+**Fix:**
+```typescript
+// ✅ CORRECT - Always reassign after mutating
+expandedIds.value.add(nodeId)
+expandedIds.value = new Set(expandedIds.value)
+```
+
+**Symptoms:**
+- Chevron button visible but clicking does nothing
+- Console shows no errors
+- Children exist but don't render
+
+**Key Insight:** This is a Vue 3 limitation - use `new Set()` or `new Map()` reassignment pattern when working with collections in reactive refs.
 
 ## Coding Rules
 
