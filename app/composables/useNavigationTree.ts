@@ -15,13 +15,24 @@ export interface TreeNode {
 }
 
 /**
+ * Generate cache key that changes every hour
+ * This ensures menu changes are picked up within 1 hour
+ */
+function getCacheKey(): string {
+  const now = new Date()
+  const hourTimestamp = Math.floor(now.getTime() / (1000 * 60 * 60)) // Changes every hour
+  return `navigation-tree-${hourTimestamp}`
+}
+
+/**
  * Build hierarchical navigation tree from @nuxt/content collection
  */
 export function useNavigationTree() {
   // Use useState for server-side rendering and client hydration
-  const tree = useState<TreeNode | null>('navigation-tree', () => null)
+  // Cache key changes hourly to pick up menu structure changes
+  const tree = useState<TreeNode | null>(getCacheKey(), () => null)
   // Use useState for loading state to prevent duplicate fetches across components
-  const isLoading = useState<boolean>('navigation-tree-loading', () => false)
+  const isLoading = useState<boolean>(`${getCacheKey()}-loading`, () => false)
 
   /**
    * Load navigation tree from content collection
@@ -495,44 +506,53 @@ function parseYamlMenu(content: string): MenuItemType[] {
     if (!currentLevel) continue
     const currentArray = currentLevel.array
 
-    // Handle array item marker (-)
-    if (trimmed.startsWith('- ')) {
-      const content = trimmed.substring(2).trim()
-
-      // Empty array item (separator)
-      if (!content) {
+    // Handle array item marker (-) with or without space
+    if (trimmed.startsWith('-')) {
+      // Handle bare `-` (separator)
+      if (trimmed === '-') {
         currentArray.push(null)
         continue
       }
 
-      // Check for key: value or key:
-      const colonIndex = content.indexOf(':')
+      // Handle `- ` with content
+      if (trimmed.startsWith('- ')) {
+        const content = trimmed.substring(2).trim()
 
-      if (colonIndex === -1) {
-        // Plain string value
-        currentArray.push(content)
-      } else {
-        // Object with key: value
-        const key = content.substring(0, colonIndex).trim().replace(/^['"]|['"]$/g, '')
-        let value = content.substring(colonIndex + 1).trim().replace(/^['"]|['"]$/g, '')
+        // Empty array item (separator)
+        if (!content) {
+          currentArray.push(null)
+          continue
+        }
 
-        if (!value) {
-          // No value - check if next line is indented (has children) or same level (header)
-          const nextLine = lines[i + 1]
-          const hasChildren = nextLine !== undefined && nextLine.search(/\S/) > indent
+        // Check for key: value or key:
+        const colonIndex = content.indexOf(':')
 
-          if (hasChildren) {
-            // Key with children - will have nested items on next lines
-            const obj: { [key: string]: MenuItemType[] } = { [key]: [] }
-            currentArray.push(obj)
-            stack.push({ indent: indent, array: obj[key] as MenuItemType[] })
-          } else {
-            // Header - key with no value and no children
-            currentArray.push({ [key]: null })
-          }
+        if (colonIndex === -1) {
+          // Plain string value
+          currentArray.push(content)
         } else {
-          // Key with value
-          currentArray.push({ [key]: value })
+          // Object with key: value
+          const key = content.substring(0, colonIndex).trim().replace(/^['"]|['"]$/g, '')
+          let value = content.substring(colonIndex + 1).trim().replace(/^['"]|['"]$/g, '')
+
+          if (!value) {
+            // No value - check if next line is indented (has children) or same level (header)
+            const nextLine = lines[i + 1]
+            const hasChildren = nextLine !== undefined && nextLine.search(/\S/) > indent
+
+            if (hasChildren) {
+              // Key with children - will have nested items on next lines
+              const obj: { [key: string]: MenuItemType[] } = { [key]: [] }
+              currentArray.push(obj)
+              stack.push({ indent: indent, array: obj[key] as MenuItemType[] })
+            } else {
+              // Header - key with no value and no children
+              currentArray.push({ [key]: null })
+            }
+          } else {
+            // Key with value
+            currentArray.push({ [key]: value })
+          }
         }
       }
     } else if (trimmed.includes(':')) {

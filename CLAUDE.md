@@ -317,6 +317,59 @@ const isActive = computed(() => {
 
 **Result:** Clear distinction prevents ambiguity when multiple menu items point to the same page. Only the primary location gets highlighted.
 
+### Navigation Menu Cache & YAML Parser Fixes (2025-10-20)
+**Problem:** Menu items appeared in wrong order, separators didn't render, and wrong page titles displayed (e.g., "Terms" instead of "Tithing"). Issues persisted even after forced cache reset.
+
+**Root Causes:**
+1. **YAML Parser Bug**: Parser only recognized `- ` (dash with space) for separators, not `-` (dash alone)
+2. **Stale Cache**: Navigation tree cached indefinitely with old menu structure using `useState('navigation-tree')` - changes to `_menu.yml` weren't picked up
+
+**Solution:**
+1. **YAML Parser Fix** - Handle both separator formats:
+```typescript
+// parseYamlMenu() - Handle bare `-` separator
+if (trimmed === '-') {
+  currentArray.push(null)  // Separator
+  continue
+}
+// Then handle `- ` with content
+if (trimmed.startsWith('- ')) {
+  const content = trimmed.substring(2).trim()
+  // ...
+}
+```
+
+2. **Hourly Cache Expiration** - Auto-invalidate cache every hour:
+```typescript
+// Generate cache key that changes hourly
+function getCacheKey(): string {
+  const hourTimestamp = Math.floor(Date.now() / (1000 * 60 * 60))
+  return `navigation-tree-${hourTimestamp}`
+}
+
+// Use dynamic cache key
+const tree = useState<TreeNode | null>(getCacheKey(), () => null)
+const isLoading = useState<boolean>(`${getCacheKey()}-loading`, () => false)
+```
+
+**Implementation:**
+- [useNavigationTree.ts:17-25](app/composables/useNavigationTree.ts#L17-L25) - Added `getCacheKey()` function for hourly cache keys
+- [useNavigationTree.ts:499-514](app/composables/useNavigationTree.ts#L499-L514) - Fixed YAML parser to handle both `-` and `- ` separator formats
+- [useNavigationTree.ts:33-35](app/composables/useNavigationTree.ts#L33-L35) - Updated `useState` calls to use hourly cache keys
+
+**How It Works:**
+- Cache key changes every 60 minutes (e.g., `navigation-tree-501234` → `navigation-tree-501235`)
+- When hour changes: cache miss → tree rebuilds with latest `_menu.yml`
+- Within same hour: cache hit → no rebuild, optimal performance
+- Old cached trees automatically garbage collected by Vue/Nuxt
+
+**Result:**
+✅ Menu separators render correctly (both `-` and `- ` work)
+✅ Menu items appear in exact `_menu.yml` order
+✅ Correct page titles display
+✅ Menu changes automatically picked up within 1 hour
+✅ No manual cache clearing needed
+
 ### Hierarchical Menu System (2025-10-19)
 **Problem:** Menu files were scattered across subdirectories (`/content/{domain}/**/_menu.yml`), making it hard to visualize and maintain the full navigation structure.
 
@@ -775,48 +828,8 @@ npm run dev
 # Check console for errors
 ```
 
-### Navigation Menu Order Incorrect (2025-10-09)
-**Problem:** Navigation items displayed in alphabetical order instead of `_menu.yml` order.
-
-**Root Cause:** `_menu.yml` files not copied to `/public/` before frontend fetches them. When fetch fails, code falls back to alphabetical sorting.
-
-**Solution:** Modified `watchImages()` to synchronously copy all files BEFORE starting watcher:
-```typescript
-// scripts/watch-images.ts
-export async function watchImages() {
-  await cleanPublicDirectory()
-  await copyAllImages()  // ← Ensures files ready before Nuxt starts serving
-  // ... then start watcher with ignoreInitial: true
-}
-```
-
-**Fix:** Restart dev server to trigger synchronous copy. Files copied in order:
-1. Clean `/public/` (preserves favicon.ico, robots.txt)
-2. Copy all images and `_menu.yml` files synchronously
-3. Start watching for changes
-
-### CONTENT Environment Variable Not Working (2025-10-15)
-**Problem:** Command-line `CONTENT=domain npm run dev` defaulting to wrong directory or ignoring env var.
-
-**Root Cause:** Environment variable captured at module import time instead of runtime. ES modules run top-level code immediately when imported.
-
-**Symptoms:**
-- `CONTENT=church npm run dev` shows "📦 Copying from: /content/ofgod/" (wrong domain)
-- Watcher copying files from default domain instead of specified one
-- Content from wrong domain appearing in navigation
-
-**Solution:**
-1. Check that `.env` file doesn't conflict with command-line value
-2. Verify default is `ofgod` (not `eternal`) in [scripts/watch-images.ts](scripts/watch-images.ts#L19) and [content.config.ts](content.config.ts#L6)
-3. Restart dev server completely: `Ctrl+C` then re-run with env var
-4. Clear cache if switching domains: `rm -rf .nuxt .output`
-
-**Correct Usage:**
-```bash
-CONTENT=church npm run dev       # Sets for single command
-export CONTENT=church; npm run dev  # Sets for session
-# OR edit .env file: CONTENT=church
-```
+### CONTENT Environment Variable Not Working
+**Fix:** Restart dev server, clear cache if switching domains: `rm -rf .nuxt .output`. Verify `.env` doesn't conflict with command-line value.
 
 ### Image Watcher Not Working
 - Check Nuxt `ready` hook in `nuxt.config.ts` (import path must be `'./scripts/watch-images'` NOT `'./scripts/watch-images.js'`)
@@ -828,104 +841,28 @@ export CONTENT=church; npm run dev  # Sets for session
 - Note: Only root `_menu.yml` is copied (subdirectory menus no longer used)
 
 ### Images Not Appearing (404 errors)
-- **Check URL structure**: Images should be at `/church/history/image.jpg` (no domain prefix)
-- **Verify files exist**: `ls /public/church/history/` (domain prefix stripped in public)
-- **Draft images**: If page is `*.draft.md`, images WON'T copy to `/public/` (expected behavior)
-- **Dev mode**: Images auto-copied on startup. If missing, restart dev server
-- **Manual copy**: `CONTENT=kingdom npx tsx scripts/copy-images.ts`
-- **Wrong domain**: Ensure `CONTENT` env var matches (check `.env` file)
-- **Production**: Run `npm run generate` (not `npm run build` - copies images first)
-
-**Console Logs:**
-```bash
-# Published image copied:
-✓ Image added: church/history/constantine.statue.jpg
-
-# Draft image skipped:
-⊗ Skipped draft image: constantine.aqaba_church.jpg
-```
+- Restart dev server (auto-copies on startup)
+- Manual copy: `CONTENT=domain npx tsx scripts/copy-images.ts`
+- Draft images (`*.draft.md`) don't copy to `/public/` (expected)
+- Production: Run `npm run generate` (not `npm run build`)
 
 ### Links with .md Extensions in Generated HTML
-- **Check ProseA component**: Verify `/app/components/content/ProseA.vue` exists
-- **Rebuild required**: Run `npm run generate` after ProseA changes
-- **Test fragments**: Links like `/page.md#anchor` should render as `/page#anchor`
-- **Inspect HTML**: Check `.output/public/**/*.html` for remaining `.md` extensions
-- **Regex pattern**: ProseA uses `/\.md(#|\?|$)/` to handle fragments and query strings
+- ProseA component strips `.md` at render time. Run `npm run generate` after changes.
 
 ### Migration Issues
-- **Image naming**: Check if image name already matches page slug to avoid duplication
-- **Relative links wrong**: Ensure page path is correct in migration context
-- **Links missing .md**: Verify migration script adds `.md` to internal links
-- Check migration output for `Internal Links` and `Migrated Images` counts
-- Use `--dry-run` to preview without writing
+- Use `--dry-run` to preview. Check output for `Internal Links` and `Migrated Images` counts.
 
 ### Content Not Loading
-- Verify `CONTENT` env var matches directory in `/content/`
-- Check `/content/{domain}/` exists and has `.md` files
-- Ensure valid YAML frontmatter (title, published, navigation)
 - Clear cache: `rm -rf .nuxt .output && npm run dev`
 
-### Bible Verses Not Working
-- Verify plugin loaded: Console shows "🔗 Bible Tooltips plugin starting..."
-- Check for blue underlined text on references
-- Shorthand needs full reference first: `John 14:16,26` (not `,26` alone)
-- Run `npm test` to verify regex patterns
-- Inspect element: `data-reference` should have full expanded reference
+### TypeScript Errors / Hydration Mismatches
+- Clear cache: `rm -rf .nuxt .output && npx nuxi prepare && npm run dev`
 
-### TypeScript Errors
-- Run `npx nuxi prepare` to regenerate types
-- Clear cache: `rm -rf .nuxt .output`
+### TOC Not Appearing After Navigation
+**Fix:** Use `onUpdated()` lifecycle hook in page components. See Architecture Decisions → TOC Post-Render Processing.
 
-### Hydration Mismatches
-- Clear build cache: `rm -rf .nuxt .output && npx nuxi prepare && npm run dev`
-- Always clear cache after template changes
-- Bible tooltips scan after ContentRenderer via `watch` + `nextTick`
-
-### Theme Not Persisting
-- Use `useAppTheme` composable (not direct Vuetify manipulation)
-- Theme stored in localStorage as `theme-preference`
-
-### TOC Not Appearing After Navigation (2025-10-17)
-**Problem:** Table of Contents appears on initial page load but disappears after navigating to other pages.
-
-**Root Cause:** Race condition between layout and page components. Layout's `watch(route.path)` cleared TOC AFTER page had already generated it.
-
-**Solution:** Use Vue's `onUpdated()` lifecycle hook in page components (see Architecture Decisions → TOC Post-Render Processing). Remove layout's conflicting `watch(route.path)`.
-
-**Fix:**
-```typescript
-// Page components use useContentPostProcessing composable
-useContentPostProcessing(page)
-
-// Layout provides generateTOC but doesn't watch route changes
-provide('generateTOC', () => {
-  const container = mdAndUp.value ? desktopContentContainer.value : mobileContentContainer.value
-  if (container) generateTOC(container)
-})
-```
-
-**Key Insight:** `onUpdated()` is the standard Vue pattern for "run code after component updates". Fires reliably after ContentRenderer finishes rendering.
-
-### Navigation Menu Not Expanding (2025-10-19)
-**Problem:** Submenu items (e.g., Trinity) won't expand when clicking the chevron button. Menu shows children exist but nothing happens on click.
-
-**Root Cause:** Vue 3 doesn't automatically detect mutations to Set/Map objects inside reactive refs. The `expandedIds` Set was being mutated but Vue's reactivity system didn't trigger re-renders.
-
-**Solution:** Reassign the ref with a new Set instance after mutations (see Architecture Decisions → Navigation Menu Expansion Reactivity Fix).
-
-**Fix:**
-```typescript
-// ✅ CORRECT - Always reassign after mutating
-expandedIds.value.add(nodeId)
-expandedIds.value = new Set(expandedIds.value)
-```
-
-**Symptoms:**
-- Chevron button visible but clicking does nothing
-- Console shows no errors
-- Children exist but don't render
-
-**Key Insight:** This is a Vue 3 limitation - use `new Set()` or `new Map()` reassignment pattern when working with collections in reactive refs.
+### Navigation Menu Not Expanding
+**Fix:** Reassign Set/Map after mutations: `expandedIds.value = new Set(expandedIds.value)`. See Architecture Decisions → Navigation Menu Expansion Reactivity Fix.
 
 ## Coding Rules
 
