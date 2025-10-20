@@ -9,6 +9,7 @@ Fix the following problems:
 - [ ] The first line of the article content (after the frontmatter) contains an H1 title as first heading
 - [ ] There are 1 and only 1 H1 title in the article
 - [ ] Convert underscore markdown headers `-------` to hashed headers prefixed with `##`
+- [ ] Convert ` -- ` double hyphens that are surrounded by spaces, to a single em dash (keep the spaces around the em dash).
 - [ ] Frontmatter minimal (no title/published/navigation fields)
 - [ ] File extension: .md for published, .draft.md for unpublished
 - [ ] Ensure that markdown links within the same document to anchors/headers are valid, for example `#some-header-in-same-doc`

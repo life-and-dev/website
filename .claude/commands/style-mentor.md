@@ -1,5 +1,5 @@
 ---
-description: Change the article style to a mentoring
+description: Change the article style to a mentoring. Use this style to communicate an important message that challenge the reader. Useful for controversal topics.
 ---
 
 Review the article specified by the user for quality and conformance to project specifications. If no path is provided, ask the user which article to review.

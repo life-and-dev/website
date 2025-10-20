@@ -1,5 +1,5 @@
 ---
-description: Change the article style to academical
+description: Change the article style to academical. Use this style to objectively discuss or explain a topic. Useful to present facts to the reader.
 ---
 
 Review the article specified by the user for quality and conformance to project specifications. If no path is provided, ask the user which article to review.
