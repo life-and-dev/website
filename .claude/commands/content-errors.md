@@ -31,4 +31,5 @@ Fix the following problems:
 - [ ] Blockquotes use standard markdown
 - [ ] If in _menu.yml, verify slug format: `.` for local, `/path` for absolute
 - [ ] Summarize the article in one or two sentences in the `description` field of the frontmatter.
+- [ ] The article description will be used as a meta tag element that describes the page for SEO. Insure that it is search engine compliant and not longer than 160 characters.
 - [ ] Update the `keywords` field of the frontmatter with sensible keywords related to the content of this article. Use unique keywords that would make this article stand out among other articles. Avoid using common or generic terms as keywords.
