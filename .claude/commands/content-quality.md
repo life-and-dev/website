@@ -24,6 +24,8 @@ Report any issues found with specific line numbers and suggested fixes. Provide 
 
 Ignore grammar errors in quoted text.
 
+Avoid using em dashes or en dashes (hypens) in sentences. Rather use multiple short sentences with periods `.` that flows into each other. Ignore em dashes in quoted text.
+
 ## Recommendations
 
 Prompt the user with one or more suggestions how you would have rewritten problematic sections and ask the user if it should be corrected or ignored. If the user choose skip, mark that problem resolved and continue with the next problem.
@@ -37,8 +39,6 @@ Only suggest how the following could be improved, unless the user specically ask
 - [ ] Suggest links to external websites that support the author's views
 - [ ] If the author deviated from the title or description of the article, suggest what content should be moved out of the article.
 - [ ] Suggest how sections of the article could be shortended without changing the message that the author intend to communicate.
-
-Avoid using em dashes or en dashes (hypens) in sentences. Rather use multiple short sentences with periods `.` that flows into each other. Ignore em dashes in quoted text.
 
 ### Critique
 
