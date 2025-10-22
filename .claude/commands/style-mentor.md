@@ -20,4 +20,4 @@ The format of the article should be:
 4. Exploring possible solutions or explanations (3rd person)
 5. Conclusion and advise (2nd person)
 
-Avoid using em dashes or en dashes (hypens) in sentences. Rather use multiple short sentences with periods `.` that flows into each other. Ignore em dashes in quoted text.
+Avoid using em dashes (—) or en dashes (–) in sentences. Rather use multiple short sentences with periods `.` that flow into each other.

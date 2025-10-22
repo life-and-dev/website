@@ -12,7 +12,6 @@ Prompt the user about each problem detected and ask the user if it should be cor
 
 - [ ] No broken internal links (verify target files exist)
 - [ ] Check if page of external links exist and contains the content the link suggest to provide, except for links to https://eternal.family.net.za which need to verification because it is the original website (we are gradually migrating content from that website and it all will eventually become internal links, so multiple links to that website is acceptable)
-- [ ] If multiple pages in directory, verify _menu.yml exists
 - [ ] Check that bible verses are quoted correctly from the bible
 - [ ] Check that the correct bible verses was referenced by comparing the context/sentence in which the bible verse appear. For example `Jesus said love your enemies (Genesis 1:1)` is wrong because that is not what Genesis 1:1 says.
 - [ ] Check that the author's sentences are readable without unnecessary repetitions (except for quoted text)
@@ -24,7 +23,7 @@ Report any issues found with specific line numbers and suggested fixes. Provide 
 
 Ignore grammar errors in quoted text.
 
-Avoid using em dashes or en dashes (hypens) in sentences. Rather use multiple short sentences with periods `.` that flows into each other. Ignore em dashes in quoted text.
+Avoid using em dashes (—) or en dashes (–) in sentences. Rather use multiple short sentences with periods `.` that flow into each other.
 
 ## Recommendations
 
