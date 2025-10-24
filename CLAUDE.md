@@ -22,6 +22,51 @@ Migrates content from a Grav-based website (located at `../eternal`) to statical
 
 ## Architecture Decisions
 
+### Standard YAML Parser Migration (2025-10-23)
+**Problem:** Custom YAML parser was complex, hard to maintain, and didn't follow industry standards. Menu format conventions were unclear.
+
+**Solution:** Migrated to standard `yaml` npm package with simplified, industry-standard menu format conventions.
+
+**New Menu Format:**
+
+1. **Lookup H1 from Markdown** (filename-based):
+```yaml
+- my-page              # String → lookup H1 from my-page.md
+- parent:              # Array → lookup H1 from parent.md
+  - child              # → lookup H1 from parent/child.md
+```
+
+2. **Custom Titles** (title-based):
+```yaml
+- Custom Title: path             # Link to path.md with custom title
+- Home: /                        # Link to index.md with title "Home"
+- External: https://example.com  # External link
+```
+
+3. **Separators & Headers**:
+```yaml
+- ===                 # Separator (horizontal line)
+- Section Name: ===   # Header/title (non-clickable)
+```
+
+**Implementation:**
+- [useNavigationTree.ts](app/composables/useNavigationTree.ts) - Uses `parse()` from `yaml` package
+- [fetchMarkdownH1()](app/composables/useNavigationTree.ts#L500-L520) - Fetches and extracts H1 titles from markdown files
+- [migrate-menu-format.ts](scripts/migrate-menu-format.ts) - Migration script to convert old format to new standard
+
+**Migration Command:**
+```bash
+npm run migrate:menu-format              # Migrate all domains
+npm run migrate:menu-format -- --dry-run # Preview changes
+```
+
+**Benefits:**
+- ✅ Industry-standard YAML format
+- ✅ Better editor support & validation
+- ✅ Simpler, more maintainable code
+- ✅ Clear separation: filename vs. custom title
+- ✅ H1 titles automatically synced from markdown files
+
 ### Cloudflare Pages Static Site Routing (2025-10-17)
 **Problem:** Direct page access like `https://word.ofgod.info/downloads` returned 404 errors. Pages would load initially but then Nuxt's client-side JavaScript showed 404 after a few milliseconds. Cloudflare Pages also cached the invalid `/* /404.html 404` redirect from previous deployments.
 
@@ -375,52 +420,53 @@ const isLoading = useState<boolean>(`${getCacheKey()}-loading`, () => false)
 
 **Solution:** Consolidated to **single `_menu.yml` per domain** with nested YAML array syntax supporting headers, separators, submenus, and all path types.
 
-**New Format (`/content/{domain}/_menu.yml`):**
+**Format (`/content/{domain}/_menu.yml`):**
 ```yaml
-- trinity:                         # Submenu with children
-  - abraham-3-visitors             # Relative page: /trinity/abraham-3-visitors
-  - Members of the Trinity:        # Header (non-clickable label)
-  - 'The Father': https://ofgod.info      # External link
-  - 'The Son': https://son.ofgod.info    # External link
-  - holy-spirit                    # Relative page: /trinity/holy-spirit
--                                  # Separator (blank line)
-- about                            # Root-level page: /about
-- disclaimer                       # Root-level page: /disclaimer
-- edit                             # Root-level page: /edit
+- trinity:                              # Array → lookup H1 from trinity.md (has children)
+  - abraham-3-visitors                  # String → lookup H1 from trinity/abraham-3-visitors.md
+  - Members of the Trinity: ===         # Header (non-clickable, uses key as title)
+  - The Father: https://ofgod.info      # External link (custom title)
+  - The Son: /                          # Custom title → link to /index.md
+  - holy-spirit                         # String → lookup H1 from trinity/holy-spirit.md
+- ===                                   # Separator marker
+- about                                 # String → lookup H1 from about.md
+- disclaimer                            # String → lookup H1 from disclaimer.md
+- edit                                  # String → lookup H1 from edit.md
 ```
 
 **Path Resolution Examples:**
 ```yaml
-- page                  # Relative: /page
-- ./sub/page            # Current dir: /sub/page
-- /about                # Absolute: /about
-- folder:               # Submenu with children
-  - child               # Relative to /folder: /folder/child
-  - ../sibling          # Parent dir: /sibling
-  - /root-page          # Absolute: /root-page
+- page                  # String → lookup H1 from /page.md
+- ./sub/page            # Current dir: /sub/page.md
+- /about                # Absolute: /about.md
+- folder:               # Array → lookup H1 from /folder.md (has children)
+  - child               # Relative to /folder: /folder/child.md
+  - ../sibling          # Parent dir: /sibling.md
+  - /root-page          # Absolute: /root-page.md
 ```
 
 **Note:** Avoid circular references (e.g., adding `/` as a child of a submenu).
 
 **Syntax Rules:**
-- **String**: `- trinity` → Primary menu item (can be highlighted when active)
-- **Object with value**: `- 'Title': path` → Alias link (never highlighted, never expandable)
-- **Object with null**: `- 'Header Text':` → Non-clickable section header
-- **Nested array**: `- trinity:` with children → Primary submenu (can be highlighted)
-- **Blank/null**: `-` → Horizontal separator divider
+- **String**: `- trinity` → Lookup H1 from `trinity.md` (primary item, can have children if followed by indent)
+- **String**: `- ===` → Horizontal separator divider
+- **Array (colon)**: `- trinity:` → Lookup H1 from `trinity.md` (has children below)
+- **Object**: `- 'Custom Title': path` → Use custom title, link to `path.md` (never expandable)
+- **Object**: `- 'Header Text': ===` → Non-clickable section header
 - **Relative paths**: `../edit` (parent), `./page` (current), `/page` (root)
 - **External URLs**: `https://...` → Opens in new tab with icon
 
 **Implementation:**
-- [useNavigationTree.ts](app/composables/useNavigationTree.ts) - Complete rewrite with hierarchical YAML parser
-  - `parseYamlMenu()` - Look-ahead logic distinguishes headers from submenus
-  - `processMenuItems()` - Recursively builds tree from nested arrays
+- [useNavigationTree.ts](app/composables/useNavigationTree.ts) - Uses standard `yaml` package parser
+  - `parse()` from `yaml` package - Industry-standard YAML parsing
+  - `fetchMarkdownH1()` - Fetches markdown files and extracts H1 titles
+  - `processMenuItems()` - Async recursive processing with H1 lookups
   - `resolvePath()` - Handles `../`, `./`, and `/` path resolution
   - **Performance**: Uses `useState` for SSR caching - menu built once, reused for all navigations
   - Menu only fetched on initial page load, then cached in Nuxt payload
-- [TreeNode.vue](app/components/TreeNode.vue#L9-L16) - Added header rendering (uppercase, secondary color, non-clickable)
+- [TreeNode.vue](app/components/TreeNode.vue#L9-L16) - Header rendering (uppercase, secondary color, non-clickable)
 - [watch-images.ts](scripts/watch-images.ts#L85-L90) - Only watches root `_menu.yml` (not subdirectories)
-- [migrate-menu.ts](scripts/migrate-menu.ts) - Migration utility to consolidate old scattered menus
+- [migrate-menu-format.ts](scripts/migrate-menu-format.ts) - Migration utility to convert to standard format
 
 **Performance Optimization (2025-10-19):**
 - Menu tree built **once** on initial page load
@@ -430,16 +476,15 @@ const isLoading = useState<boolean>(`${getCacheKey()}-loading`, () => false)
 - Subsequent navigations: **0 HTTP requests** (tree cached in memory)
 - Tree serialized in SSR payload and hydrated on client
 
-**Migration:**
+**Menu Format Migration:**
 ```bash
-# Consolidate scattered menu files
-npm run migrate:menu -- --domain=son
+# Convert menu files to standard YAML format
+npm run migrate:menu-format              # Migrate all domains
+npm run migrate:menu-format -- --dry-run # Preview changes first
+npm run migrate:menu-format -- --domain=son  # Migrate specific domain
 
 # Review generated menu
 cat content/son/_menu.yml
-
-# Delete old subdirectory menus
-rm content/son/trinity/_menu.yml
 
 # Test navigation
 CONTENT=son npm run dev
@@ -457,8 +502,10 @@ CONTENT=son npm run dev
 - ✅ Headers to organize sections
 - ✅ All path types supported
 - ✅ DRY principle compliance
+- ✅ Industry-standard YAML format
+- ✅ H1 titles automatically synced from markdown files
 
-**Result:** Cleaner, more maintainable navigation with enhanced organizational features.
+**Result:** Cleaner, more maintainable navigation with enhanced organizational features and automatic title synchronization.
 
 ### SEO & Tooltips (2025-10-10)
 **Features:**
@@ -610,6 +657,40 @@ Genesis=1, Exodus=2, ... John=43, Romans=45, ... Revelation=66
 - Reduced JavaScript bundle size
 
 **Result:** Clean separation between static styles (CSS) and dynamic positioning (JavaScript).
+
+### Bible Tooltips Scoping Fix (2025-10-23)
+**Problem:** Bible verse parser was converting references to interactive tooltips throughout the entire page, including navigation menus, sidebars, breadcrumbs, and table of contents.
+
+**Root Cause:** The `scan()` method in [bible-tooltips.client.ts](app/plugins/bible-tooltips.client.ts) defaulted to scanning `document.body` when no container was specified. The [useContentPostProcessing.ts](app/composables/useContentPostProcessing.ts) composable called `scan()` without parameters, causing the entire DOM to be processed.
+
+**Solution:** Scope the Bible verse parser to only process content within the `.content-body` element (article content area).
+
+**Implementation:**
+```typescript
+// bible-tooltips.client.ts - Accept optional container parameter
+public scan(container?: HTMLElement) {
+  this.detectBibleReferences(container)
+}
+
+// TypeScript declarations updated
+interface NuxtApp {
+  $bibleTooltips: {
+    scan: (container?: HTMLElement) => void
+  }
+}
+
+// useContentPostProcessing.ts - Pass article container
+const contentContainer = document.querySelector('.content-body, article')
+$bibleTooltips.scan(contentContainer as HTMLElement)
+```
+
+**Files Changed:**
+- [bible-tooltips.client.ts:518](app/plugins/bible-tooltips.client.ts#L518) - Added optional `container` parameter to `scan()` method
+- [bible-tooltips.client.ts:533](app/plugins/bible-tooltips.client.ts#L533) - Updated provider to pass container through
+- [bible-tooltips.client.ts:541,549](app/plugins/bible-tooltips.client.ts#L541) - Updated TypeScript declarations for both modules
+- [useContentPostProcessing.ts:43](app/composables/useContentPostProcessing.ts#L43) - Pass `.content-body` container to `scan()`
+
+**Result:** Bible verse tooltips now only appear in markdown article content. Navigation menus, sidebars, breadcrumbs, and TOC are no longer processed for Bible references.
 
 ## Usage Instructions
 

@@ -10,6 +10,7 @@
     "postinstall": "nuxt prepare",
     "migrate": "tsx scripts/migrate-grav.ts",
     "favicon": "tsx scripts/generate-favicons.ts",
+    "start": "npm run dev",
     "test": "vitest"
   },
   "dependencies": {

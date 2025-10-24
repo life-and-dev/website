@@ -1,3 +1,5 @@
+import { parse as parseYaml } from 'yaml'
+
 export interface TreeNode {
   id: string
   title: string
@@ -259,15 +261,15 @@ async function applyMenuOrdering(nodeMap: Map<string, TreeNode>, root: TreeNode)
       return
     }
 
-    // Parse YAML array (basic parser for nested structure)
-    const menuItems = parseYamlMenu(menuContent)
+    // Parse YAML using standard parser
+    const menuItems = parseYaml(menuContent) as MenuItemType[]
 
     // Track which nodes have been ordered
     const orderedNodes = new Set<TreeNode>()
 
     // Process menu items recursively
     let order = 0
-    processMenuItems(menuItems, root, nodeMap, orderedNodes, order, '/')
+    await processMenuItems(menuItems, root, nodeMap, orderedNodes, order, '/')
 
     // Add unlisted nodes alphabetically at the end
     addUnlistedNodes(nodeMap, root, orderedNodes)
@@ -293,19 +295,19 @@ function isAncestor(node: TreeNode, potentialDescendant: TreeNode): boolean {
 /**
  * Process menu items recursively and build tree structure
  */
-function processMenuItems(
+async function processMenuItems(
   items: MenuItemType[],
   parent: TreeNode,
   nodeMap: Map<string, TreeNode>,
   orderedNodes: Set<TreeNode>,
   startOrder: number,
   contextPath: string
-): number {
+): Promise<number> {
   let order = startOrder
 
   for (const item of items) {
-    // Handle null/blank (separator)
-    if (item === null || item === '') {
+    // Handle null/blank (separator) - legacy support
+    if (item === null) {
       const separatorId = `separator-${order}`
       const separatorPath = contextPath === '/' ? `/__${separatorId}` : `${contextPath}/__${separatorId}`
       const separator: TreeNode = {
@@ -323,8 +325,28 @@ function processMenuItems(
       continue
     }
 
-    // Handle string (page path)
+    // Handle string items
     if (typeof item === 'string') {
+      // Check for separator marker
+      if (item === '===') {
+        const separatorId = `separator-${order}`
+        const separatorPath = contextPath === '/' ? `/__${separatorId}` : `${contextPath}/__${separatorId}`
+        const separator: TreeNode = {
+          id: separatorId,
+          title: '---',
+          path: separatorPath,
+          order: order++,
+          children: [],
+          isSeparator: true,
+          parent: parent
+        }
+        nodeMap.set(separatorPath, separator)
+        parent.children.push(separator)
+        orderedNodes.add(separator)
+        continue
+      }
+
+      // String → lookup H1 from markdown file
       const resolvedPath = resolvePath(item, contextPath)
       const node = nodeMap.get(resolvedPath)
 
@@ -333,6 +355,12 @@ function processMenuItems(
         if (isAncestor(node, parent)) {
           console.warn(`Circular reference prevented: ${node.path} cannot be child of ${parent.path}`)
           continue
+        }
+
+        // Try to fetch H1 title from markdown file
+        const h1Title = await fetchMarkdownH1(resolvedPath)
+        if (h1Title) {
+          node.title = h1Title
         }
 
         node.order = order++
@@ -351,7 +379,26 @@ function processMenuItems(
     // Handle object (custom title, external link, header, or submenu)
     if (typeof item === 'object') {
       for (const [key, value] of Object.entries(item)) {
-        // Handle null value (header)
+        // Handle header marker (value === '===')
+        if (value === '===') {
+          const headerId = `header-${order}`
+          const headerPath = contextPath === '/' ? `/__${headerId}` : `${contextPath}/__${headerId}`
+          const header: TreeNode = {
+            id: headerId,
+            title: key,
+            path: headerPath,
+            order: order++,
+            children: [],
+            isHeader: true,
+            parent: parent
+          }
+          nodeMap.set(headerPath, header)
+          parent.children.push(header)
+          orderedNodes.add(header)
+          continue
+        }
+
+        // Handle null/empty value (legacy header support)
         if (value === null || value === '') {
           const headerId = `header-${order}`
           const headerPath = contextPath === '/' ? `/__${headerId}` : `${contextPath}/__${headerId}`
@@ -389,13 +436,19 @@ function processMenuItems(
           continue
         }
 
-        // Handle submenu (array value)
+        // Handle submenu (array value) - key is markdown filename
         if (Array.isArray(value)) {
           // Find the parent node for this submenu
           const submenuPath = resolvePath(key, contextPath)
           const submenuNode = nodeMap.get(submenuPath)
 
           if (submenuNode && !orderedNodes.has(submenuNode)) {
+            // Try to fetch H1 title from markdown file
+            const h1Title = await fetchMarkdownH1(submenuPath)
+            if (h1Title) {
+              submenuNode.title = h1Title
+            }
+
             submenuNode.order = order++
             submenuNode.parent = parent
             submenuNode.isPrimary = true  // Mark submenu parent as primary
@@ -405,14 +458,14 @@ function processMenuItems(
             orderedNodes.add(submenuNode)
 
             // Process children recursively
-            order = processMenuItems(value, submenuNode, nodeMap, orderedNodes, 0, submenuPath)
+            order = await processMenuItems(value, submenuNode, nodeMap, orderedNodes, 0, submenuPath)
           } else if (!submenuNode) {
             console.warn(`Submenu parent not found: ${key} (resolved: ${submenuPath})`)
           }
           continue
         }
 
-        // Handle custom title with path
+        // Handle custom title with path (alias link)
         if (typeof value === 'string') {
           const resolvedPath = resolvePath(value, contextPath)
           const node = nodeMap.get(resolvedPath)
@@ -475,110 +528,45 @@ function resolvePath(path: string, contextPath: string): string {
 }
 
 /**
- * Parse YAML menu into nested array structure
+ * Cache for H1 titles to avoid duplicate fetches
  */
-function parseYamlMenu(content: string): MenuItemType[] {
-  const lines = content.split('\n')
-  const root: MenuItemType[] = []
-  const stack: { indent: number, array: MenuItemType[] }[] = [{ indent: -1, array: root }]
+const h1TitleCache = new Map<string, string | null>()
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (!line) continue
-
-    // Skip empty lines and comments
-    if (!line.trim() || line.trim().startsWith('#')) {
-      continue
-    }
-
-    // Measure indentation
-    const indent = line.search(/\S/)
-    const trimmed = line.trim()
-
-    // Pop stack to find correct parent level
-    while (stack.length > 1) {
-      const topLevel = stack[stack.length - 1]
-      if (!topLevel || topLevel.indent < indent) break
-      stack.pop()
-    }
-
-    const currentLevel = stack[stack.length - 1]
-    if (!currentLevel) continue
-    const currentArray = currentLevel.array
-
-    // Handle array item marker (-) with or without space
-    if (trimmed.startsWith('-')) {
-      // Handle bare `-` (separator)
-      if (trimmed === '-') {
-        currentArray.push(null)
-        continue
-      }
-
-      // Handle `- ` with content
-      if (trimmed.startsWith('- ')) {
-        const content = trimmed.substring(2).trim()
-
-        // Empty array item (separator)
-        if (!content) {
-          currentArray.push(null)
-          continue
-        }
-
-        // Check for key: value or key:
-        const colonIndex = content.indexOf(':')
-
-        if (colonIndex === -1) {
-          // Plain string value
-          currentArray.push(content)
-        } else {
-          // Object with key: value
-          const key = content.substring(0, colonIndex).trim().replace(/^['"]|['"]$/g, '')
-          let value = content.substring(colonIndex + 1).trim().replace(/^['"]|['"]$/g, '')
-
-          if (!value) {
-            // No value - check if next line is indented (has children) or same level (header)
-            const nextLine = lines[i + 1]
-            const hasChildren = nextLine !== undefined && nextLine.search(/\S/) > indent
-
-            if (hasChildren) {
-              // Key with children - will have nested items on next lines
-              const obj: { [key: string]: MenuItemType[] } = { [key]: [] }
-              currentArray.push(obj)
-              stack.push({ indent: indent, array: obj[key] as MenuItemType[] })
-            } else {
-              // Header - key with no value and no children
-              currentArray.push({ [key]: null })
-            }
-          } else {
-            // Key with value
-            currentArray.push({ [key]: value })
-          }
-        }
-      }
-    } else if (trimmed.includes(':')) {
-      // Standalone key: value (child of previous array item)
-      const colonIndex = trimmed.indexOf(':')
-      const key = trimmed.substring(0, colonIndex).trim().replace(/^['"]|['"]$/g, '')
-      const value = trimmed.substring(colonIndex + 1).trim().replace(/^['"]|['"]$/g, '')
-
-      // This should be a child of the last array item
-      if (currentArray.length > 0) {
-        const lastItem = currentArray[currentArray.length - 1]
-        if (typeof lastItem === 'object' && lastItem !== null && !Array.isArray(lastItem)) {
-          // Add to existing object
-          if (!value) {
-            const childArray: MenuItemType[] = []
-            lastItem[key] = childArray
-            stack.push({ indent: indent, array: childArray })
-          } else {
-            lastItem[key] = value
-          }
-        }
-      }
-    }
+/**
+ * Fetch and extract H1 title from markdown file
+ * Returns null if file not found or no H1 present
+ * Results are cached to prevent duplicate fetches
+ */
+async function fetchMarkdownH1(path: string): Promise<string | null> {
+  // Check cache first
+  if (h1TitleCache.has(path)) {
+    return h1TitleCache.get(path) ?? null
   }
 
-  return root
+  try {
+    // Fetch markdown file from public directory
+    const mdContent = await $fetch<string>(path + '.md', {
+      parseResponse: txt => txt,
+      headers: { 'Accept': 'text/markdown, text/plain' }
+    }).catch(() => null)
+
+    if (!mdContent) {
+      h1TitleCache.set(path, null)
+      return null
+    }
+
+    // Extract first H1 heading
+    const h1Match = mdContent.match(/^#\s+(.+)$/m)
+    const h1Title = h1Match?.[1]?.trim() ?? null
+
+    // Cache the result
+    h1TitleCache.set(path, h1Title)
+    return h1Title
+  } catch (error) {
+    console.warn(`Failed to fetch H1 from ${path}.md:`, error)
+    h1TitleCache.set(path, null)
+    return null
+  }
 }
 
 /**

@@ -39,8 +39,8 @@ export function useContentPostProcessing(pageRef: Ref<any>) {
     // Mark as processed BEFORE running operations to prevent re-entry
     processedPageId.value = pageId
 
-    // Scan for Bible verse references
-    $bibleTooltips.scan()
+    // Scan for Bible verse references (scoped to article content only)
+    $bibleTooltips.scan(contentContainer as HTMLElement)
 
     // Generate TOC (useTableOfContents will handle the "< 2 headings" check)
     if (layoutGenerateTOC) {

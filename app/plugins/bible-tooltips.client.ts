@@ -515,8 +515,8 @@ export default defineNuxtPlugin((nuxtApp) => {
       })
     }
 
-    public scan() {
-      this.detectBibleReferences()
+    public scan(container?: HTMLElement) {
+      this.detectBibleReferences(container)
     }
 
     private initializeTooltips() {
@@ -530,7 +530,7 @@ export default defineNuxtPlugin((nuxtApp) => {
 
   // Provide scan function for manual triggering after ContentRenderer completes
   nuxtApp.provide('bibleTooltips', {
-    scan: () => bibleTooltips.scan()
+    scan: (container?: HTMLElement) => bibleTooltips.scan(container)
   })
 })
 
@@ -538,7 +538,7 @@ export default defineNuxtPlugin((nuxtApp) => {
 declare module '#app' {
   interface NuxtApp {
     $bibleTooltips: {
-      scan: () => void
+      scan: (container?: HTMLElement) => void
     }
   }
 }
@@ -546,7 +546,7 @@ declare module '#app' {
 declare module '@vue/runtime-core' {
   interface ComponentCustomProperties {
     $bibleTooltips: {
-      scan: () => void
+      scan: (container?: HTMLElement) => void
     }
   }
 }
