@@ -48,6 +48,27 @@
   font-size: 1.05rem;
 }
 
+/* Nested blockquotes - create visual hierarchy */
+.content-body .blockquote-content .v-card {
+  margin-left: 1rem;
+  margin-right: 0;
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-left: 0.25rem solid rgb(var(--v-theme-secondary));
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.content-body .blockquote-content .v-card .v-card-text {
+  padding: 0.75rem 1rem;
+}
+
+/* Nested blockquote text slightly smaller */
+.content-body .blockquote-content .blockquote-content {
+  font-size: 1rem;
+  color: rgb(var(--v-theme-on-surface-rail));
+}
+
 /* Links */
 .content-body a {
   color: rgb(var(--v-theme-primary));

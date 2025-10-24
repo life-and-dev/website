@@ -230,8 +230,13 @@ description: Brief page description for SEO and navigation tooltips
 ```markdown
 > This is a quote
 > Multiple lines
+>
+> > This is a nested quote
+> > Inside the first quote
+>
+> Back to outer quote
 ```
-*Rendered as Material Design cards*
+*Rendered as Material Design cards with visual hierarchy for nested quotes (indented, colored border)*
 
 **Code:**
 ````markdown

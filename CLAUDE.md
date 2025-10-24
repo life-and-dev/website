@@ -22,6 +22,75 @@ Migrates content from a Grav-based website (located at `../eternal`) to statical
 
 ## Architecture Decisions
 
+### Menu Ordering & Alias Link Fixes (2025-10-24)
+**Problem:** Menu items appeared in incorrect order when submenus were present. Alias links (e.g., `- 'The Son': ../nature`) didn't render when the target page was already listed elsewhere in the menu.
+
+**Root Causes:**
+1. **Order Counter Bug**: Line 461 in `processMenuItems()` assigned submenu's internal order counter to parent's counter, causing subsequent items to restart numbering from 0
+2. **Alias Skip Bug**: Line 473 checked `!orderedNodes.has(node)` for alias links, preventing aliases to already-listed pages
+
+**Example of Order Bug:**
+```yaml
+- nature                    # Got order 0 ✓
+- temptations               # Got order 1 ✓
+- son-as-god:               # Got order 2 ✓
+  - john-1-18               # Got order 0 (within submenu) ✓
+- The Son of God: /         # Got order 1 ✗ (should be 3!)
+- son-of-man                # Got order 2 ✗ (should be 4!)
+```
+
+**Solution:**
+```typescript
+// Fix 1: Line 461 - Remove assignment to preserve parent's order counter
+// BEFORE: order = await processMenuItems(...)
+// AFTER:  await processMenuItems(...)
+
+// Fix 2: Line 473 - Remove check that prevented alias creation
+// BEFORE: if (node && !orderedNodes.has(node)) {
+// AFTER:  if (node) {
+```
+
+**Implementation:**
+- [useNavigationTree.ts:461](app/composables/useNavigationTree.ts#L461) - Removed `order =` assignment
+- [useNavigationTree.ts:473](app/composables/useNavigationTree.ts#L473) - Removed `!orderedNodes.has(node)` check
+
+**Why This Works:**
+- Each menu level has independent order counters starting from 0
+- Submenu children orders are relative to their parent node
+- Parent's order counter continues independently (already incremented at line 452)
+- Alias links create separate `linkNode` entities with unique IDs
+- Multiple aliases to the same page are allowed and expected behavior
+
+**Result:** Menu items render in exact `_menu.yml` order. Alias links appear correctly even when target page is already listed elsewhere.
+
+### Menu Header Text Alignment Fix (2025-10-24)
+**Problem:** Header text appeared 1.75rem to the left of regular menu item text at the same depth level, making headers look misaligned.
+
+**Root Cause:** Regular menu items have a chevron/leaf-indicator (1.5rem width + 0.25rem margin-right = 1.75rem total) before the text. Headers had no such element, so their text started immediately at the `paddingLeft` edge.
+
+**Solution:** Add 1.75rem offset to header padding to account for missing indicator space:
+```vue
+<!-- TreeNode.vue line 13 -->
+:style="{ paddingLeft: `${depth * 1.25 + 1.75}rem` }"
+```
+
+**Result:** Header text aligns with regular menu item text at the same depth level.
+
+### Menu Chevron Visibility Fix (2025-10-24)
+**Problem:** Chevron icon (expand/collapse arrow) became invisible when parent menu item was selected, blending with the active background color.
+
+**Root Cause:** Vuetify `v-icon` component has scoped styles that need `:deep()` selector to override from parent component.
+
+**Solution:** Use `:deep()` to target icon within Vuetify button component:
+```css
+/* TreeNode.vue line 201-203 */
+.tree-node.is-active :deep(.chevron-button .v-icon) {
+  color: rgb(var(--v-theme-on-selected));
+}
+```
+
+**Result:** Chevron icon visible on selected menu items, matches text color.
+
 ### Standard YAML Parser Migration (2025-10-23)
 **Problem:** Custom YAML parser was complex, hard to maintain, and didn't follow industry standards. Menu format conventions were unclear.
 
@@ -182,6 +251,7 @@ export function createBibleHubInterlinearUrl(reference: string): string {
 - **Layout**: Standard page scrolling, sidebars slide in/out with `transform: translateX`, no smart-scroll complexity
 - **MD3 Inputs**: `VTextField` defaults set to `rounded="pill"` in `nuxt.config.ts` for semi-circular ends
 - **Background Colors**: Force `bg-surface-rail` on mobile expansion panels for consistency
+- **Nested Blockquotes** (2025-10-24): Styled with visual hierarchy - indented 1rem, primary-colored left border, transparent background, reduced padding. Print CSS uses solid black border. Defined in [markdown.css](app/assets/css/markdown.css) and [print.css](app/assets/css/print.css)
 
 ### Draft Content Exclusion System (2025-10-09)
 **Problem:** Unpublished content (`published: false`) needed to be excluded from builds/navigation but kept in repository for future publication.
@@ -251,261 +321,62 @@ async function isDraftOnlyImage(imagePath: string): Promise<boolean> {
 **Solution:** H1-based titles (first `# Title` becomes page title), `.draft.md` extensions for unpublished content. TOC always skips H1, shows H2-H3 only.
 
 ### Navigation Menu Loading State Lock (2025-10-19)
-**Problem:** The `_menu.yml` file was being fetched **twice** on initial page load, wasting bandwidth and causing duplicate processing.
+**Problem:** `_menu.yml` fetched twice on page load (desktop + mobile components mount simultaneously).
 
-**Root Cause:** The layout renders both desktop and mobile `<AppNavigation>` components. Both components call `loadTree()` in their `onMounted()` hooks, and both mount at nearly the same time. This created a race condition:
-1. Desktop component mounts → checks cache (null) → starts fetching
-2. Mobile component mounts (microseconds later) → checks cache (still null) → starts fetching
-3. Result: Two simultaneous HTTP requests for the same `_menu.yml` file
-
-**Solution:** Use shared loading state with `useState` to prevent concurrent fetches:
-
+**Solution:** Shared loading state via `useState` prevents race condition:
 ```typescript
-// ❌ WRONG - Each component has separate loading state
-const isLoading = ref(false)
-
-// ✅ CORRECT - Shared loading state across all components
 const isLoading = useState<boolean>('navigation-tree-loading', () => false)
-
-async function loadTree() {
-  // Guard: Skip if already loaded OR currently loading
-  if (tree.value !== null || isLoading.value) {
-    return
-  }
-  // ... fetch logic
-}
+if (tree.value !== null || isLoading.value) return  // Guard
 ```
 
-**Implementation:**
-- [useNavigationTree.ts:23](app/composables/useNavigationTree.ts#L23) - Changed `isLoading` from `ref` to `useState` with unique key
-- [useNavigationTree.ts:32](app/composables/useNavigationTree.ts#L32) - Added `|| isLoading.value` to cache check
-
-**How It Works:**
-1. First component mounts → sets `isLoading.value = true` → starts fetch
-2. Second component mounts → sees `isLoading.value = true` → returns early (no fetch)
-3. First fetch completes → sets `tree.value` and `isLoading.value = false`
-4. Both components share the same cached tree via `useState`
-
-**Result:** Only **1 HTTP request** for `/_menu.yml` on initial page load, down from 2. Subsequent navigations: 0 requests (tree cached).
+**Result:** 1 HTTP request on initial load, 0 on subsequent navigations.
 
 ### Navigation Menu Expansion Reactivity Fix (2025-10-19)
-**Problem:** Submenu nodes (e.g., Trinity) wouldn't expand when clicking the chevron button. The `expandedIds` Set was being mutated but Vue wasn't detecting the changes.
+**Problem:** Submenu expand/collapse didn't work (Vue 3 doesn't detect Set mutations).
 
-**Root Cause:** Vue 3's reactivity system uses Proxy-based tracking. When using `Set.add()` or `Set.delete()` methods on a reactive ref, Vue doesn't detect these mutations because Set methods mutate internal state without triggering the reactive proxy's setter.
-
-**Solution:** Force Vue to detect Set changes by creating a new Set instance after every mutation:
-
+**Solution:** Reassign Set after mutations to trigger reactivity:
 ```typescript
-// ❌ WRONG - Vue won't detect this change
 expandedIds.value.add(nodeId)
-
-// ✅ CORRECT - Creating new Set triggers Vue's reactive setter
-expandedIds.value.add(nodeId)
-expandedIds.value = new Set(expandedIds.value)
+expandedIds.value = new Set(expandedIds.value)  // Triggers Vue's proxy setter
 ```
 
-**Implementation:**
-- [NavigationTree.vue:84-118](app/components/NavigationTree.vue#L84-L118) - Added `new Set()` reassignment in `handleToggle()` after both expand and collapse operations
-- [NavigationTree.vue:50-65](app/components/NavigationTree.vue#L50-L65) - Added `new Set()` reassignment in `expandPathToActive()` after auto-expanding ancestors
-
-**How It Works:**
-1. User clicks chevron → `handleToggle(nodeId)` is called
-2. Function mutates Set: `expandedIds.value.add(nodeId)`
-3. Reassign with new Set: `expandedIds.value = new Set(expandedIds.value)`
-4. Vue detects ref assignment → triggers reactive updates
-5. TreeNode components re-render with updated `isExpanded` computed
-
-**Result:** Menu expansion/collapse works correctly. This is a standard Vue 3 pattern for working with Sets and Maps in reactive refs.
+**Result:** Standard Vue 3 pattern for reactive Sets/Maps.
 
 ### Primary vs Alias Menu Items (2025-10-19)
-**Problem:** Multiple menu items could link to the same page (e.g., "Trinity" as parent node, "The Son" linking to `/`). Which item should be highlighted when navigating to that page?
+**Problem:** Which menu item to highlight when multiple items link to same page?
 
-**Solution:** Distinguish between **primary** menu items (actual page locations) and **aliases** (custom-titled shortcuts). Only primary items can be highlighted.
+**Solution:** `isPrimary` flag distinguishes actual page locations from aliases:
+- Primary (`- trinity` or `- trinity:`): Can be highlighted
+- Alias (`- 'The Son': /`): Never highlighted, just navigation shortcuts
+- Homepage `/`: Collapses all menus, no highlight
 
-**Implementation:**
-```typescript
-// TreeNode interface - isPrimary flag
-export interface TreeNode {
-  id: string
-  title: string
-  path: string
-  isPrimary?: boolean  // Only true for string/array syntax items
-  // ...
-}
-
-// Mark primary items during menu processing
-if (typeof item === 'string') {
-  node.isPrimary = true  // String syntax: - trinity
-}
-if (Array.isArray(value)) {
-  submenuNode.isPrimary = true  // Array syntax: - trinity:
-}
-if (typeof value === 'string') {
-  linkNode.isPrimary = false  // Alias: - 'The Son': /
-}
-
-// Only highlight primary items
-const isActive = computed(() => {
-  return props.node.isPrimary === true && props.node.path === props.activePath
-})
-```
-
-**Rules:**
-- **Primary items** (`- trinity` or `- trinity:`) → Can be highlighted when active
-- **Alias items** (`- 'The Son': /`) → Never highlighted, just navigation shortcuts
-- **Homepage** (`/`) → Collapses all menus, highlights nothing
-
-**Files Changed:**
-- [useNavigationTree.ts](app/composables/useNavigationTree.ts) - Added `isPrimary` flag, marking logic, `findPrimaryNodeByPath()` helper
-- [TreeNode.vue](app/components/TreeNode.vue) - Updated `isActive` computed to check `isPrimary`
-- [NavigationTree.vue](app/components/NavigationTree.vue) - Added homepage special case (collapse all menus)
-
-**Result:** Clear distinction prevents ambiguity when multiple menu items point to the same page. Only the primary location gets highlighted.
+**Result:** Only primary location gets highlighted.
 
 ### Navigation Menu Cache & YAML Parser Fixes (2025-10-20)
-**Problem:** Menu items appeared in wrong order, separators didn't render, and wrong page titles displayed (e.g., "Terms" instead of "Tithing"). Issues persisted even after forced cache reset.
-
-**Root Causes:**
-1. **YAML Parser Bug**: Parser only recognized `- ` (dash with space) for separators, not `-` (dash alone)
-2. **Stale Cache**: Navigation tree cached indefinitely with old menu structure using `useState('navigation-tree')` - changes to `_menu.yml` weren't picked up
+**Problem:** Wrong order, missing separators, stale cache.
 
 **Solution:**
-1. **YAML Parser Fix** - Handle both separator formats:
-```typescript
-// parseYamlMenu() - Handle bare `-` separator
-if (trimmed === '-') {
-  currentArray.push(null)  // Separator
-  continue
-}
-// Then handle `- ` with content
-if (trimmed.startsWith('- ')) {
-  const content = trimmed.substring(2).trim()
-  // ...
-}
-```
+1. **YAML Parser**: Handle both `-` and `- ` separator formats
+2. **Hourly Cache**: `getCacheKey()` generates timestamp-based key that changes every 60 minutes
 
-2. **Hourly Cache Expiration** - Auto-invalidate cache every hour:
-```typescript
-// Generate cache key that changes hourly
-function getCacheKey(): string {
-  const hourTimestamp = Math.floor(Date.now() / (1000 * 60 * 60))
-  return `navigation-tree-${hourTimestamp}`
-}
-
-// Use dynamic cache key
-const tree = useState<TreeNode | null>(getCacheKey(), () => null)
-const isLoading = useState<boolean>(`${getCacheKey()}-loading`, () => false)
-```
-
-**Implementation:**
-- [useNavigationTree.ts:17-25](app/composables/useNavigationTree.ts#L17-L25) - Added `getCacheKey()` function for hourly cache keys
-- [useNavigationTree.ts:499-514](app/composables/useNavigationTree.ts#L499-L514) - Fixed YAML parser to handle both `-` and `- ` separator formats
-- [useNavigationTree.ts:33-35](app/composables/useNavigationTree.ts#L33-L35) - Updated `useState` calls to use hourly cache keys
-
-**How It Works:**
-- Cache key changes every 60 minutes (e.g., `navigation-tree-501234` → `navigation-tree-501235`)
-- When hour changes: cache miss → tree rebuilds with latest `_menu.yml`
-- Within same hour: cache hit → no rebuild, optimal performance
-- Old cached trees automatically garbage collected by Vue/Nuxt
-
-**Result:**
-✅ Menu separators render correctly (both `-` and `- ` work)
-✅ Menu items appear in exact `_menu.yml` order
-✅ Correct page titles display
-✅ Menu changes automatically picked up within 1 hour
-✅ No manual cache clearing needed
+**Result:** Menu changes auto-picked up within 1 hour, no manual cache clearing needed.
 
 ### Hierarchical Menu System (2025-10-19)
-**Problem:** Menu files were scattered across subdirectories (`/content/{domain}/**/_menu.yml`), making it hard to visualize and maintain the full navigation structure.
+**Solution:** Single `_menu.yml` per domain with nested YAML syntax. Supports headers, separators, submenus, relative/absolute paths, external URLs.
 
-**Solution:** Consolidated to **single `_menu.yml` per domain** with nested YAML array syntax supporting headers, separators, submenus, and all path types.
+**Syntax:**
+- `- trinity`: Lookup H1 from `trinity.md` (primary)
+- `- trinity:` with children: Submenu
+- `- 'Title': path`: Alias link (never highlighted)
+- `- 'Header': ===`: Non-clickable section header
+- `- ===`: Separator
+- `../`, `./`, `/`: Relative/absolute path resolution
 
-**Format (`/content/{domain}/_menu.yml`):**
-```yaml
-- trinity:                              # Array → lookup H1 from trinity.md (has children)
-  - abraham-3-visitors                  # String → lookup H1 from trinity/abraham-3-visitors.md
-  - Members of the Trinity: ===         # Header (non-clickable, uses key as title)
-  - The Father: https://ofgod.info      # External link (custom title)
-  - The Son: /                          # Custom title → link to /index.md
-  - holy-spirit                         # String → lookup H1 from trinity/holy-spirit.md
-- ===                                   # Separator marker
-- about                                 # String → lookup H1 from about.md
-- disclaimer                            # String → lookup H1 from disclaimer.md
-- edit                                  # String → lookup H1 from edit.md
-```
+**Performance:** Menu built once on load, cached via `useState`. 1 HTTP request initially, 0 on navigation.
 
-**Path Resolution Examples:**
-```yaml
-- page                  # String → lookup H1 from /page.md
-- ./sub/page            # Current dir: /sub/page.md
-- /about                # Absolute: /about.md
-- folder:               # Array → lookup H1 from /folder.md (has children)
-  - child               # Relative to /folder: /folder/child.md
-  - ../sibling          # Parent dir: /sibling.md
-  - /root-page          # Absolute: /root-page.md
-```
+**Migration:** `npm run migrate:menu-format`
 
-**Note:** Avoid circular references (e.g., adding `/` as a child of a submenu).
-
-**Syntax Rules:**
-- **String**: `- trinity` → Lookup H1 from `trinity.md` (primary item, can have children if followed by indent)
-- **String**: `- ===` → Horizontal separator divider
-- **Array (colon)**: `- trinity:` → Lookup H1 from `trinity.md` (has children below)
-- **Object**: `- 'Custom Title': path` → Use custom title, link to `path.md` (never expandable)
-- **Object**: `- 'Header Text': ===` → Non-clickable section header
-- **Relative paths**: `../edit` (parent), `./page` (current), `/page` (root)
-- **External URLs**: `https://...` → Opens in new tab with icon
-
-**Implementation:**
-- [useNavigationTree.ts](app/composables/useNavigationTree.ts) - Uses standard `yaml` package parser
-  - `parse()` from `yaml` package - Industry-standard YAML parsing
-  - `fetchMarkdownH1()` - Fetches markdown files and extracts H1 titles
-  - `processMenuItems()` - Async recursive processing with H1 lookups
-  - `resolvePath()` - Handles `../`, `./`, and `/` path resolution
-  - **Performance**: Uses `useState` for SSR caching - menu built once, reused for all navigations
-  - Menu only fetched on initial page load, then cached in Nuxt payload
-- [TreeNode.vue](app/components/TreeNode.vue#L9-L16) - Header rendering (uppercase, secondary color, non-clickable)
-- [watch-images.ts](scripts/watch-images.ts#L85-L90) - Only watches root `_menu.yml` (not subdirectories)
-- [migrate-menu-format.ts](scripts/migrate-menu-format.ts) - Migration utility to convert to standard format
-
-**Performance Optimization (2025-10-19):**
-- Menu tree built **once** on initial page load
-- Navigation tree cached in `useState` - shared across all components
-- Loading state lock prevents duplicate fetches when both desktop/mobile navigation components mount
-- Initial load: **1 HTTP request** for `/_menu.yml`
-- Subsequent navigations: **0 HTTP requests** (tree cached in memory)
-- Tree serialized in SSR payload and hydrated on client
-
-**Menu Format Migration:**
-```bash
-# Convert menu files to standard YAML format
-npm run migrate:menu-format              # Migrate all domains
-npm run migrate:menu-format -- --dry-run # Preview changes first
-npm run migrate:menu-format -- --domain=son  # Migrate specific domain
-
-# Review generated menu
-cat content/son/_menu.yml
-
-# Test navigation
-CONTENT=son npm run dev
-```
-
-**Visual Features:**
-- **Headers**: Uppercase, small font, secondary color, non-clickable
-- **Separators**: Horizontal dividers between menu sections
-- **External Links**: Show `mdi-open-in-new` icon
-- **Submenus**: Expand/collapse with chevron, auto-expand to active page
-
-**Benefits:**
-- ✅ Single source of truth per domain
-- ✅ Full structure visible at once
-- ✅ Headers to organize sections
-- ✅ All path types supported
-- ✅ DRY principle compliance
-- ✅ Industry-standard YAML format
-- ✅ H1 titles automatically synced from markdown files
-
-**Result:** Cleaner, more maintainable navigation with enhanced organizational features and automatic title synchronization.
+**Result:** Single source of truth, DRY principle, H1 titles auto-synced.
 
 ### SEO & Tooltips (2025-10-10)
 **Features:**
@@ -521,176 +392,30 @@ CONTENT=son npm run dev
 - Penalties: Path depth (-1 per level beyond root)
 
 ### TOC Post-Render Processing (2025-10-17)
-**Problem:** Table of Contents appeared on initial load but disappeared after navigating to other pages.
+**Problem:** TOC disappeared after navigation (race condition with layout watch).
 
-**Root Cause:** Layout's `watch(route.path)` cleared TOC AFTER page component had already generated it. Race condition between parent layout and child page components.
-
-**Solution:** Use Vue's standard `onUpdated()` lifecycle hook in page components. Remove conflicting layout watch.
-
-**Implementation:**
-```typescript
-// app/composables/useContentPostProcessing.ts
-export function useContentPostProcessing(pageRef: Ref<any>) {
-  const processedPageId = ref<string | null>(null)
-
-  // Reset flag when new data arrives
-  watch(pageRef, () => { processedPageId.value = null }, { immediate: true })
-
-  // Process after ContentRenderer finishes rendering
-  onUpdated(() => {
-    nextTick(() => {
-      if (processedPageId.value === pageId) return  // Guard: prevent duplicates
-      processedPageId.value = pageId
-      $bibleTooltips.scan()
-      layoutGenerateTOC()  // useTableOfContents handles < 2 headings check
-    })
-  })
-
-  // Handle initial mount
-  onMounted(() => { nextTick(() => processContent()) })
-}
-```
-
-**Key Points:**
-- `onUpdated()` fires after ContentRenderer completes (standard Vue pattern)
-- `nextTick()` ensures DOM updates are fully committed
-- Guard flag prevents duplicate processing
-- No timers, MutationObservers, or template refs needed
-- Layout no longer clears TOC (caused race condition)
+**Solution:** Use `onUpdated()` + `nextTick()` in page components with guard flag to prevent duplicate processing.
 
 **Result:** TOC appears reliably on both initial load and navigation.
 
 ### Bolls.life Bible API Integration (2025-10-17)
-**Problem:** Users requested ESV and NKJV translation support for Bible verse tooltips. Initial attempt used bible-api.com which lacks these copyrighted translations.
+**Solution:** Migrated to Bolls.life API for 100+ translations (ESV, NKJV, KJV, etc.). Uses book numbering (John=43), supports verse ranges, no authentication required.
 
-**Solution:** Migrated to Bolls.life API which provides 100+ translations including ESV and NKJV at no cost.
+**Implementation:** [bible-verse-utils.ts](app/utils/bible-verse-utils.ts) maps book names to numbers, fetches from `https://bolls.life/get-verse/{TRANSLATION}/{BOOK}/{CHAPTER}/{VERSE}/`
 
-**API Format:**
-Bolls.life requires **standard book numbering (1-66)** instead of book names:
-```typescript
-// Single verse: https://bolls.life/get-verse/{TRANSLATION}/{BOOK}/{CHAPTER}/{VERSE}/
-https://bolls.life/get-verse/ESV/43/3/16/  // John 3:16 (ESV)
-
-// Verse range: Fetch chapter, filter verses
-https://bolls.life/get-text/NKJV/43/3/  // John chapter 3 → filter verses 16-18
-```
-
-**Book Number Mapping:**
-```typescript
-// app/utils/bible-verse-utils.ts - getBookNumber()
-Genesis=1, Exodus=2, ... John=43, Romans=45, ... Revelation=66
-
-// Supports abbreviations:
-'john' → 43, 'jn' → 43, 'joh' → 43
-'1 corinthians' → 46, '1cor' → 46, '1co' → 46
-```
-
-**Implementation:**
-- [bible-verse-utils.ts](app/utils/bible-verse-utils.ts) - Added `getBookNumber()`, `processBollsVerse()`, `processBollsVerseRange()`
-- [bible-tooltips.client.ts](app/plugins/bible-tooltips.client.ts#L54-L128) - Parse reference → book number → Bolls.life API
-- HTML stripping: Removes `<S>` Strong's numbers, `<a>` cross-references, preserves `<i>` italic text
-
-**Response Format:**
-```json
-{
-  "pk": 1958205,
-  "verse": 16,
-  "text": "For God so loved the world, <i>that</i> he gave his only Son...",
-  "comment": "<a href='/ESV/45/5/8'>Rom. 5:8</a>..."
-}
-```
-
-**Features:**
-- ✅ **ESV, NKJV, KJV, YLT, WEB** and 100+ translations
-- ✅ **Verse ranges** - `John 3:16-18` fetches chapter, filters verses 16-18
-- ✅ **No authentication** - Free, CORS-enabled
-- ✅ **No rate limits** - No documented restrictions
-- ✅ **HTML handling** - Strips tags for clean tooltip display
-
-**User Experience:**
-- Requested: `John 3:16 (ESV)` → Displays: `John 3:16 (ESV)` with actual ESV text ✅
-- Requested: `Romans 8:28 (NKJV)` → Displays: `Romans 8:28 (NKJV)` with NKJV text ✅
-- Requested: `Psalm 23:1-3 (KJV)` → Displays: `Psalm 23:1-3 (KJV)` with verses 1-3 ✅
-- No translation specified → Defaults to ESV ✅
-
-**Documentation:** https://bolls.life/api/
-
-**Result:** Full ESV and NKJV support without fallbacks. Users get requested translations directly.
+**Result:** Users get requested translations directly (defaults to ESV).
 
 ### Bible Tooltips CSS Extraction (2025-10-17)
-**Problem:** Bible tooltip styles were embedded as inline styles in the plugin JavaScript, making them harder to maintain and violating the DRY principle.
+**Solution:** Extracted inline styles to [bible-tooltips.css](app/assets/css/bible-tooltips.css). Retained only dynamic positioning in JS.
 
-**Solution:** Extracted all CSS to dedicated stylesheet [app/assets/css/bible-tooltips.css](app/assets/css/bible-tooltips.css).
-
-**Implementation:**
-- Created CSS file with classes: `.bible-tooltip`, `.bible-tooltip-overlay`, `.bible-tooltip-title`, `.bible-tooltip-translation`, `.bible-tooltip-text`, `.bible-tooltip-footer`, `.bible-tooltip-link`, `.bible-tooltip-icon`, `.bible-ref`
-- Updated [bible-tooltips.client.ts](app/plugins/bible-tooltips.client.ts) to use CSS classes instead of inline styles
-- Added CSS file to [nuxt.config.ts](nuxt.config.ts) `css` array for global loading
-- Retained only dynamic inline styles for positioning (`left`, `top`) and visibility (`display`)
-
-**CSS Structure:**
-```css
-/* Overlay - covers entire viewport when tooltip is locked */
-.bible-tooltip-overlay { position: fixed; z-index: 9999; ... }
-
-/* Tooltip container - uses theme CSS variables */
-.bible-tooltip {
-  background: rgb(var(--v-theme-surface-appbar));
-  color: rgb(var(--v-theme-on-surface));
-  ...
-}
-
-/* Semantic classes for content sections */
-.bible-tooltip-title { font-weight: 600; ... }
-.bible-tooltip-translation { color: rgb(var(--v-theme-secondary)); ... }
-.bible-tooltip-footer { border-top: 1px solid rgb(var(--v-theme-outline)); ... }
-
-/* Bible reference spans in content */
-.bible-ref { color: rgb(var(--v-theme-primary)); text-decoration: underline; ... }
-```
-
-**Benefits:**
-- Single source of truth for tooltip styling
-- Easier to maintain and customize
-- Better separation of concerns (structure vs. presentation)
-- Theme variables properly referenced in CSS
-- Reduced JavaScript bundle size
-
-**Result:** Clean separation between static styles (CSS) and dynamic positioning (JavaScript).
+**Result:** DRY principle, easier maintenance, smaller JS bundle.
 
 ### Bible Tooltips Scoping Fix (2025-10-23)
-**Problem:** Bible verse parser was converting references to interactive tooltips throughout the entire page, including navigation menus, sidebars, breadcrumbs, and table of contents.
+**Problem:** Bible tooltips appeared in navigation, sidebars, breadcrumbs (scanned entire `document.body`).
 
-**Root Cause:** The `scan()` method in [bible-tooltips.client.ts](app/plugins/bible-tooltips.client.ts) defaulted to scanning `document.body` when no container was specified. The [useContentPostProcessing.ts](app/composables/useContentPostProcessing.ts) composable called `scan()` without parameters, causing the entire DOM to be processed.
+**Solution:** `scan()` accepts optional `container` parameter. Pass `.content-body` element to scope processing to article content only.
 
-**Solution:** Scope the Bible verse parser to only process content within the `.content-body` element (article content area).
-
-**Implementation:**
-```typescript
-// bible-tooltips.client.ts - Accept optional container parameter
-public scan(container?: HTMLElement) {
-  this.detectBibleReferences(container)
-}
-
-// TypeScript declarations updated
-interface NuxtApp {
-  $bibleTooltips: {
-    scan: (container?: HTMLElement) => void
-  }
-}
-
-// useContentPostProcessing.ts - Pass article container
-const contentContainer = document.querySelector('.content-body, article')
-$bibleTooltips.scan(contentContainer as HTMLElement)
-```
-
-**Files Changed:**
-- [bible-tooltips.client.ts:518](app/plugins/bible-tooltips.client.ts#L518) - Added optional `container` parameter to `scan()` method
-- [bible-tooltips.client.ts:533](app/plugins/bible-tooltips.client.ts#L533) - Updated provider to pass container through
-- [bible-tooltips.client.ts:541,549](app/plugins/bible-tooltips.client.ts#L541) - Updated TypeScript declarations for both modules
-- [useContentPostProcessing.ts:43](app/composables/useContentPostProcessing.ts#L43) - Pass `.content-body` container to `scan()`
-
-**Result:** Bible verse tooltips now only appear in markdown article content. Navigation menus, sidebars, breadcrumbs, and TOC are no longer processed for Bible references.
+**Result:** Tooltips only appear in markdown content.
 
 ## Usage Instructions
 

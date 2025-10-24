@@ -10,7 +10,7 @@
     <div
       v-else-if="node.isHeader"
       class="tree-header"
-      :style="{ paddingLeft: `${depth * 1.25}rem` }"
+      :style="{ paddingLeft: `${depth * 1.25 + 1.75}rem` }"
     >
       <span class="header-title">{{ node.title }}</span>
     </div>
@@ -183,7 +183,7 @@ function handleSelect() {
 }
 
 .header-title {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: rgb(var(--v-theme-on-surface-appbar));
   text-transform: uppercase;
@@ -196,6 +196,10 @@ function handleSelect() {
 .chevron-button {
   margin-right: 0.25rem;
   flex-shrink: 0;
+}
+
+.tree-node.is-active :deep(.chevron-button .v-icon) {
+  color: rgb(var(--v-theme-on-selected));
 }
 
 .leaf-indicator {

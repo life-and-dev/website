@@ -458,7 +458,7 @@ async function processMenuItems(
             orderedNodes.add(submenuNode)
 
             // Process children recursively
-            order = await processMenuItems(value, submenuNode, nodeMap, orderedNodes, 0, submenuPath)
+            await processMenuItems(value, submenuNode, nodeMap, orderedNodes, 0, submenuPath)
           } else if (!submenuNode) {
             console.warn(`Submenu parent not found: ${key} (resolved: ${submenuPath})`)
           }
@@ -470,7 +470,7 @@ async function processMenuItems(
           const resolvedPath = resolvePath(value, contextPath)
           const node = nodeMap.get(resolvedPath)
 
-          if (node && !orderedNodes.has(node)) {
+          if (node) {
             // Always create a link-only node for custom titled links
             // This prevents expansion even if the target page has children
             const linkNode: TreeNode = {
