@@ -29,6 +29,10 @@ const FAVICON_FILES = [
   'icon-512.png'
 ]
 
+// Debounce timers for JSON regeneration (5 second delay)
+let navigationDebounceTimer: NodeJS.Timeout | null = null
+let searchDebounceTimer: NodeJS.Timeout | null = null
+
 /**
  * Get content domain from environment variable (read at runtime, not import time)
  */
@@ -48,6 +52,67 @@ function getSourceDir(): string {
  */
 function getTargetDir(): string {
   return path.resolve(__dirname, '..', 'public')
+}
+
+/**
+ * Regenerate navigation JSON with debouncing (5 second delay)
+ */
+function regenerateNavigation() {
+  if (navigationDebounceTimer) {
+    clearTimeout(navigationDebounceTimer)
+  }
+
+  navigationDebounceTimer = setTimeout(async () => {
+    console.log('🔄 Regenerating navigation tree...')
+    try {
+      const { generateNavigationJson } = await import('./build-navigation.js')
+      await generateNavigationJson()
+    } catch (error) {
+      console.error('❌ Failed to regenerate navigation:', error)
+    }
+    navigationDebounceTimer = null
+  }, 5000)
+}
+
+/**
+ * Regenerate search index JSON with debouncing (5 second delay)
+ */
+function regenerateSearchIndex() {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+  }
+
+  searchDebounceTimer = setTimeout(async () => {
+    console.log('🔄 Regenerating search index...')
+    try {
+      const { generateSearchIndexJson } = await import('./build-search-index.js')
+      await generateSearchIndexJson()
+    } catch (error) {
+      console.error('❌ Failed to regenerate search index:', error)
+    }
+    searchDebounceTimer = null
+  }, 5000)
+}
+
+/**
+ * Generate navigation and search JSON files (one-time on startup)
+ */
+export async function generateJsonFiles() {
+  console.log('🔨 Generating JSON files...')
+
+  try {
+    const { generateNavigationJson } = await import('./build-navigation.js')
+    await generateNavigationJson()
+  } catch (error) {
+    console.error('❌ Failed to generate navigation:', error)
+  }
+
+  try {
+    const { generateSearchIndexJson } = await import('./build-search-index.js')
+    await generateSearchIndexJson()
+  } catch (error) {
+    console.error('❌ Failed to generate search index:', error)
+  }
 }
 
 /**
@@ -130,7 +195,7 @@ async function cleanPublicDirectory() {
 }
 
 /**
- * Watch images and menu files in content directory and sync to public directory
+ * Watch images, markdown files, and menu files in content directory
  */
 export async function watchImages() {
   const sourceDir = getSourceDir()
@@ -142,12 +207,16 @@ export async function watchImages() {
   // Copy all existing files BEFORE starting watcher (ensures files are ready)
   await copyAllImages()
 
-  console.log(`👀 Watching images and menus in: ${sourceDir}`)
+  // Generate navigation and search JSON files
+  await generateJsonFiles()
+
+  console.log(`👀 Watching images, markdown, and menus in: ${sourceDir}`)
   console.log(`👀 Target directory: ${targetDir}\n`)
 
   const patterns = [
     ...IMAGE_EXTS.map(ext => `${sourceDir}/**/*.${ext}`),
-    `${sourceDir}/${MENU_FILE}` // Only watch root menu file
+    `${sourceDir}/**/*.md`,           // Watch all markdown files
+    `${sourceDir}/${MENU_FILE}`       // Watch root menu file
   ]
 
   const watcher = chokidar.watch(patterns, {
@@ -164,8 +233,14 @@ export async function watchImages() {
       const fileName = path.basename(filePath)
       if (fileName === MENU_FILE) {
         copyMenuFile(filePath, true, 'added')
+        regenerateNavigation() // Menu change affects navigation
       } else if (fileName === LOGO_FILE) {
         handleLogoChange(filePath, 'added')
+      } else if (fileName.endsWith('.md')) {
+        // Markdown file added - regenerate both navigation and search
+        console.log(`📝 Markdown added: ${fileName}`)
+        regenerateNavigation()
+        regenerateSearchIndex()
       } else {
         copyImage(filePath, true, 'added')
       }
@@ -174,8 +249,14 @@ export async function watchImages() {
       const fileName = path.basename(filePath)
       if (fileName === MENU_FILE) {
         copyMenuFile(filePath, true, 'updated')
+        regenerateNavigation() // Menu change affects navigation
       } else if (fileName === LOGO_FILE) {
         handleLogoChange(filePath, 'updated')
+      } else if (fileName.endsWith('.md')) {
+        // Markdown file changed - regenerate both navigation and search
+        console.log(`📝 Markdown updated: ${fileName}`)
+        regenerateNavigation()
+        regenerateSearchIndex()
       } else {
         copyImage(filePath, true, 'updated')
       }
@@ -184,8 +265,14 @@ export async function watchImages() {
       const fileName = path.basename(filePath)
       if (fileName === MENU_FILE) {
         deleteMenuFile(filePath)
+        regenerateNavigation() // Menu deletion affects navigation
       } else if (fileName === LOGO_FILE) {
         console.log(`🗑️ Logo removed: ${fileName}`)
+      } else if (fileName.endsWith('.md')) {
+        // Markdown file deleted - regenerate both navigation and search
+        console.log(`📝 Markdown deleted: ${fileName}`)
+        regenerateNavigation()
+        regenerateSearchIndex()
       } else {
         deleteImage(filePath)
       }

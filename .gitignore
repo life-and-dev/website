@@ -39,6 +39,7 @@ logs
 /public/**/*.svg
 /public/**/*.yml
 /public/site.webmanifest
+/public/_*
 
 # Keep static assets
 !/public/robots.txt
