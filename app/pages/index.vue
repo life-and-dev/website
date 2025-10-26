@@ -16,9 +16,11 @@
 
 <script setup lang="ts">
 // Query home page content using Nuxt Content v3 API
+// Use lazy: true to defer SQL database loading until after navigation/search JSON files load
 const { data: page, pending } = await useAsyncData(
   'content-home',
-  () => queryCollection('content').path('/').first()
+  () => queryCollection('content').path('/').first(),
+  { lazy: true }
 )
 
 // SEO meta tags

@@ -55,6 +55,7 @@
 
 <script setup lang="ts">
 import type { SearchableFields } from '~/composables/useSearchRelevance'
+import type { SearchIndexEntry } from '~/../../scripts/build-search-index'
 
 interface SearchResult {
   path: string
@@ -78,21 +79,16 @@ const tooltip = useTooltipConfig()
 // Relevance scoring
 const { sortByRelevance } = useSearchRelevance()
 
-/**
- * Normalize page path by removing trailing slashes
- */
-function normalizePath(page: any): string {
-  const path = page.path || page.id || '/'
-  return path === '/' ? '/' : path.replace(/\/$/, '')
-}
+// Search index fetcher
+const { loadSearchIndex } = useSearchIndex()
 
 /**
  * Check if page matches search query
  */
-function pageMatchesQuery(page: any, queryLower: string): boolean {
-  // Check title, description, navigation title, excerpt
+function pageMatchesQuery(page: SearchIndexEntry, queryLower: string): boolean {
+  // Check title, description, excerpt
   const textMatch = (
-    page.title?.toLowerCase().includes(queryLower) ||
+    page.title.toLowerCase().includes(queryLower) ||
     page.description?.toLowerCase().includes(queryLower) ||
     page.excerpt?.toLowerCase().includes(queryLower)
   )
@@ -118,37 +114,26 @@ async function handleSearch(query: string) {
   emit('search-active', true)
 
   try {
-    const allPages = await queryCollection('content').all()
+    // Load pre-built search index (cached after first load)
+    const allPages = await loadSearchIndex()
     const queryLower = query.toLowerCase()
 
-    // Filter and deduplicate in single pass
-    const uniquePages = new Map<string, any>()
-    for (const page of allPages) {
-      if (pageMatchesQuery(page, queryLower)) {
-        const path = normalizePath(page)
-        if (!uniquePages.has(path)) {
-          uniquePages.set(path, { ...page, normalizedPath: path })
-        }
-      }
-    }
+    // Filter pages that match query
+    const matchingPages = allPages.filter(page =>
+      pageMatchesQuery(page, queryLower)
+    )
 
-    // Convert to array and prepare searchable fields
-    const matchingPages = Array.from(uniquePages.values()).map((page: any) => ({
-      ...page,
-      path: page.normalizedPath,
-    })) as SearchableFields[]
-
-    // Sort by relevance score
-    const sortedPages = sortByRelevance(matchingPages, query, (page) => page.title || 'Untitled')
+    // Sort by relevance score (SearchIndexEntry is compatible with SearchableFields)
+    const sortedPages = sortByRelevance(matchingPages, query, (page) => page.title)
 
     // Map top 50 results to SearchResult interface
     searchResults.value = sortedPages
       .slice(0, 50)
-      .map((page: any) => {
+      .map((page) => {
         const segments = page.path.split('/').filter(Boolean)
         return {
           path: page.path,
-          title: page.title || 'Untitled',
+          title: page.title,
           breadcrumb: segments.length > 0
             ? segments.join('/')
             : '/',

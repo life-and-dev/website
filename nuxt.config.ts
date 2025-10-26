@@ -53,7 +53,7 @@ export default defineNuxtConfig({
   },
 
   hooks: {
-    // Start image watcher when dev server starts
+    // Start content watcher when dev server starts
     'ready': async (nuxt) => {
       if (nuxt.options.dev) {
         const { watchImages } = await import('./scripts/watch-images')
@@ -61,9 +61,19 @@ export default defineNuxtConfig({
       }
     },
 
-    // Generate and copy favicons before build
+    // Generate navigation, search index, and favicons before build
     'build:before': async () => {
       const domain: string = process.env.CONTENT || ''
+
+      // Generate navigation and search JSON files
+      console.log(`\n🔨 Generating navigation and search index...`)
+      const { generateNavigationJson } = await import('./scripts/build-navigation')
+      const { generateSearchIndexJson } = await import('./scripts/build-search-index')
+
+      await generateNavigationJson()
+      await generateSearchIndexJson()
+
+      // Generate favicons
       const { generateFavicons, copyFaviconsToPublic, generateWebManifest } = await import('./scripts/generate-favicons')
 
       // Domain name mapping

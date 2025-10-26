@@ -18,9 +18,11 @@
 const route = useRoute()
 
 // Query content using Nuxt Content v3 API
+// Use lazy: true to defer SQL database loading until after navigation/search JSON files load
 const { data: page, pending } = await useAsyncData(
   `content-${route.path}`,
-  () => queryCollection('content').path(route.path).first()
+  () => queryCollection('content').path(route.path).first(),
+  { lazy: true }
 )
 
 // SEO meta tags
