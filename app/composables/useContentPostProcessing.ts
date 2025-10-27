@@ -2,6 +2,10 @@
  * Post-process content after ContentRenderer finishes rendering
  * Uses Vue's onUpdated lifecycle hook to detect when ContentRenderer completes rendering
  *
+ * NOTE: Bible verses are now wrapped in <span class="bible-ref"> at BUILD TIME
+ * via the content transformer (see content.config.ts and app/transformers/bible-verses.ts)
+ * This composable only attaches event listeners to pre-existing spans.
+ *
  * Strategy:
  * 1. Watch for page data arrival
  * 2. Use onUpdated() to run processing after ContentRenderer re-renders
@@ -18,7 +22,8 @@ export function useContentPostProcessing(pageRef: Ref<any>) {
   const processedPageId = ref<string | null>(null)
 
   /**
-   * Process content: scan for Bible verses and generate TOC
+   * Process content: attach event listeners to Bible verses and generate TOC
+   * Bible verses are already wrapped in spans at build time
    * Only runs once per page load
    */
   function processContent() {

@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "build": "tsx scripts/copy-images.ts && nuxt build",
-    "dev": "nuxt dev",
+    "dev": "rm -rf .data && nuxt dev",
+    "dev:cached": "nuxt dev",
     "generate": "tsx scripts/copy-images.ts && nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",

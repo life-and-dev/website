@@ -16,11 +16,12 @@
 
 <script setup lang="ts">
 // Query home page content using Nuxt Content v3 API
-// Use lazy: true to defer SQL database loading until after navigation/search JSON files load
+// server: true = Only query during SSR/prerendering, never on client
+// This prevents 3.5MB database download - client uses prerendered HTML
 const { data: page, pending } = await useAsyncData(
   'content-home',
   () => queryCollection('content').path('/').first(),
-  { lazy: true }
+  { server: true } // true = SSR/prerender only
 )
 
 // SEO meta tags

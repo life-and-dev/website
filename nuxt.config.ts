@@ -1,5 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import { getDomainThemes } from './app/config/themes'
+import { createBibleReferencePatterns } from './app/utils/bible-book-names'
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
@@ -53,6 +54,58 @@ export default defineNuxtConfig({
   },
 
   hooks: {
+    // Wrap Bible verses in spans BEFORE markdown is parsed to AST
+    // This prevents hydration mismatch by ensuring server and client HTML match
+    'content:file:beforeParse': (ctx) => {
+      const { file } = ctx
+      if (!file.id.endsWith('.md')) return
+
+      console.log('📖 Processing Bible verses in:', file.id)
+
+      const patterns = createBibleReferencePatterns()
+      const excludedContexts = ['```', '~~~', '<code', '<pre', '<a ']
+
+      // Check if we're inside excluded context
+      const isInExcludedContext = (text: string, index: number): boolean => {
+        const before = text.substring(0, index)
+
+        // Check for code blocks
+        const codeBlockCount = (before.match(/```/g) || []).length
+        if (codeBlockCount % 2 === 1) return true
+
+        // Check for links - rough check for [text](url) format
+        const lastOpenBracket = before.lastIndexOf('[')
+        const lastCloseBracket = before.lastIndexOf(']')
+        if (lastOpenBracket > lastCloseBracket) return true
+
+        return false
+      }
+
+      // Process each pattern
+      patterns.forEach(pattern => {
+        const matches: Array<{ index: number; text: string }> = []
+
+        let match
+        while ((match = pattern.exec(file.body)) !== null) {
+          if (!isInExcludedContext(file.body, match.index)) {
+            matches.push({
+              index: match.index,
+              text: match[0]
+            })
+          }
+        }
+        pattern.lastIndex = 0
+
+        // Replace matches in reverse order to preserve indices
+        matches.reverse().forEach(({ index, text }) => {
+          const before = file.body.substring(0, index)
+          const after = file.body.substring(index + text.length)
+          const wrapped = `<span class="bible-ref" data-reference="${text}">${text}</span>`
+          file.body = before + wrapped + after
+        })
+      })
+    },
+
     // Start content watcher when dev server starts
     'ready': async (nuxt) => {
       if (nuxt.options.dev) {

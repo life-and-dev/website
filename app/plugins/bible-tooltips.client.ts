@@ -7,7 +7,6 @@ import {
   getBookNumber,
   type ProcessedBibleVerse
 } from '~/utils/bible-verse-utils'
-import { createBibleReferencePatterns } from '~/utils/bible-book-names'
 
 export default defineNuxtPlugin((nuxtApp) => {
   if (process.server) return
@@ -243,168 +242,22 @@ export default defineNuxtPlugin((nuxtApp) => {
       }
     }
 
-    private detectBibleReferences(container: HTMLElement = document.body) {
-      const patterns = createBibleReferencePatterns()
 
-      const walker = document.createTreeWalker(
-        container,
-        NodeFilter.SHOW_TEXT,
-        {
-          acceptNode: (node) => {
-            const parent = node.parentElement
-            if (!parent) return NodeFilter.FILTER_REJECT
+    public scan(container?: HTMLElement) {
+      // Bible verses are now wrapped in spans at build time (via content transformer)
+      // We just need to attach event listeners to existing .bible-ref elements
+      this.attachEventListeners(container)
+    }
 
-            // Skip if already processed or in excluded elements
-            if (parent.classList.contains('bible-tooltip') ||
-                parent.classList.contains('no-bible') ||
-                parent.tagName === 'SCRIPT' ||
-                parent.tagName === 'STYLE' ||
-                parent.tagName === 'A') {  // Don't process text inside links
-              return NodeFilter.FILTER_REJECT
-            }
+    /**
+     * Attach event listeners to pre-existing .bible-ref spans
+     * (Spans are created at build time by the content transformer)
+     */
+    private attachEventListeners(container?: HTMLElement) {
+      const root = container || document.body
 
-            // Also check if any ancestor is a link
-            let ancestor = parent.parentElement
-            while (ancestor) {
-              if (ancestor.tagName === 'A') {
-                return NodeFilter.FILTER_REJECT
-              }
-              ancestor = ancestor.parentElement
-            }
-
-            return NodeFilter.FILTER_ACCEPT
-          }
-        }
-      )
-
-      const textNodes: Text[] = []
-      let node: Node | null
-      while (node = walker.nextNode()) {
-        textNodes.push(node as Text)
-      }
-
-      textNodes.forEach(textNode => {
-        const text = textNode.textContent || ''
-        let hasMatches = false
-        const matches: Array<{index: number, length: number, text: string}> = []
-
-        // Collect all matches from all patterns
-        patterns.forEach(pattern => {
-          let match
-          while ((match = pattern.exec(text)) !== null) {
-            const matchStart = match.index
-            const matchEnd = matchStart + match[0].length
-
-            // Check if this match overlaps with any existing match
-            const overlaps = matches.some(m =>
-              (matchStart >= m.index && matchStart < m.index + m.length) ||
-              (matchEnd > m.index && matchEnd <= m.index + m.length) ||
-              (matchStart <= m.index && matchEnd >= m.index + m.length)
-            )
-
-            if (!overlaps) {
-              matches.push({
-                index: matchStart,
-                length: match[0].length,
-                text: match[0]
-              })
-              hasMatches = true
-            }
-          }
-          pattern.lastIndex = 0 // Reset regex
-        })
-
-        // Sort matches by index
-        matches.sort((a, b) => a.index - b.index)
-
-        // Expand shorthand notation (e.g., "John 14:16,26" or "Revelation 1:5, 17:14")
-        const expanded: Array<{index: number, length: number, text: string, displayText: string}> = []
-
-        const addExpanded = (index: number, length: number, text: string, displayText: string) => {
-          expanded.push({ index, length, text, displayText })
-        }
-
-        matches.forEach(match => {
-          // Check if followed by comma-separated shorthand (e.g., ",26" or ", 17:14")
-          const afterMatch = text.substring(match.index + match.length)
-          const shorthandPattern = /^(?:,\s*(\d+(?::\d+)?(?:-\d+(?::\d+)?)?))*/
-          const shorthandMatch = afterMatch.match(shorthandPattern)
-
-          if (shorthandMatch && shorthandMatch[0].length > 0) {
-            // Extract book name and chapter from the original match
-            const refMatch = match.text.match(/^(.+?)\s+(\d+):(\d+)/)
-            if (refMatch) {
-              const [, book, chapter] = refMatch
-
-              // Add the original match
-              addExpanded(match.index, match.length, match.text, match.text)
-
-              // Parse shorthand references
-              const shorthands = shorthandMatch[0].split(',').filter(s => s.trim())
-              let currentIndex = match.index + match.length
-
-              shorthands.forEach(shorthand => {
-                const trimmed = shorthand.trim()
-                if (trimmed) {
-                  const expandedRef = trimmed.includes(':')
-                    ? `${book} ${trimmed}`           // Chapter:verse format (e.g., "17:14")
-                    : `${book} ${chapter}:${trimmed}` // Just verse number (e.g., "26")
-
-                  const shorthandIndex = text.indexOf(shorthand, currentIndex)
-                  if (shorthandIndex !== -1) {
-                    addExpanded(shorthandIndex, shorthand.length, expandedRef, trimmed)
-                    currentIndex = shorthandIndex + shorthand.length
-                  }
-                }
-              })
-              return
-            }
-          }
-
-          // No shorthand or not a chapter:verse pattern - add original
-          addExpanded(match.index, match.length, match.text, match.text)
-        })
-
-        // Replace matches by creating nodes manually (more reliable than innerHTML)
-        if (hasMatches && textNode.parentElement && textNode.parentNode) {
-          // Sort matches by index (forward order for sequential processing)
-          expanded.sort((a, b) => a.index - b.index)
-
-          let lastIndex = 0
-          const fragment = document.createDocumentFragment()
-
-          expanded.forEach(match => {
-            // Add text before the match
-            if (match.index > lastIndex) {
-              const beforeText = text.substring(lastIndex, match.index)
-              fragment.appendChild(document.createTextNode(beforeText))
-            }
-
-            // Create the span element
-            const span = document.createElement('span')
-            span.className = 'bible-ref'
-            span.setAttribute('data-reference', match.text)
-            span.textContent = match.displayText
-            fragment.appendChild(span)
-
-            lastIndex = match.index + match.length
-          })
-
-          // Add remaining text after last match
-          if (lastIndex < text.length) {
-            const afterText = text.substring(lastIndex)
-            fragment.appendChild(document.createTextNode(afterText))
-          }
-
-          // Replace the original text node with the fragment
-          textNode.parentNode.insertBefore(fragment, textNode)
-          textNode.remove()
-        }
-      })
-
-      // Add event listeners to new bible references
-      container.querySelectorAll('.bible-ref').forEach(element => {
-        if (element.hasAttribute('data-bible-processed')) return
+      // Find all .bible-ref elements that don't have event listeners yet
+      root.querySelectorAll('.bible-ref:not([data-bible-processed])').forEach(element => {
         element.setAttribute('data-bible-processed', 'true')
 
         const reference = element.getAttribute('data-reference')
@@ -513,10 +366,6 @@ export default defineNuxtPlugin((nuxtApp) => {
         }
         document.addEventListener('click', closeOnOutsideClick)
       })
-    }
-
-    public scan(container?: HTMLElement) {
-      this.detectBibleReferences(container)
     }
 
     private initializeTooltips() {

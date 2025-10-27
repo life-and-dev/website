@@ -22,6 +22,74 @@ Migrates content from a Grav-based website (located at `../eternal`) to statical
 
 ## Architecture Decisions
 
+### Bible Verse Tooltip Hydration Fix (2025-10-27)
+**Problem:** Bible verse tooltips caused hydration mismatch errors because client-side JavaScript was modifying the DOM during hydration. Server HTML contained plain text `Matthew 3:16`, but client-side plugin wrapped it in `<span class="bible-ref">`, creating different HTML structures.
+
+**Root Cause:**
+- Build time: Markdown rendered as plain text
+- Runtime: Client plugin scanned DOM and wrapped Bible references in spans
+- Vue detected different HTML between server and client → hydration mismatch
+
+**Solution:** Use Nuxt Content's `content:file:beforeParse` hook to wrap Bible verses in spans BEFORE markdown is parsed, ensuring server and client HTML match perfectly.
+
+**Implementation:**
+```typescript
+// nuxt.config.ts - Lines 59-115
+hooks: {
+  'content:file:beforeParse': (ctx) => {
+    const { file } = ctx
+    if (!file.id.endsWith('.md')) return
+
+    const patterns = createBibleReferencePatterns()
+
+    // Wrap each Bible reference in markdown
+    patterns.forEach(pattern => {
+      // Collect all matches (avoiding excluded contexts like code blocks, links)
+      // Replace in reverse order to preserve indices
+      const wrapped = `<span class="bible-ref" data-reference="${text}">${text}</span>`
+      file.body = before + wrapped + after
+    })
+  }
+}
+```
+
+**Key Details:**
+- Hook receives `ctx` parameter with `file` property (not `file` directly)
+- Use `file.id` not `file._id` to check file extension
+- `file.body` is raw markdown string at this stage (before AST parsing)
+- Modify string directly using regex patterns and replacement
+- Exclude code blocks, links, and other special contexts
+
+**Cache Management:**
+- Nuxt Content caches parsed files in `.data/` directory
+- Cached files skip the `beforeParse` hook entirely
+- **Must delete `.data/` after adding/modifying hooks:** `rm -rf .data`
+- Updated dev script to auto-clear cache: `"dev": "rm -rf .data && nuxt dev"`
+
+**Development Workflow:**
+```bash
+npm run dev         # Clears .data cache, hook runs on all files
+npm run dev:cached  # Keeps cache, faster startup (use when hook unchanged)
+```
+
+**Files Modified:**
+- [nuxt.config.ts:59-115](nuxt.config.ts#L59-L115) - Added beforeParse hook
+- [package.json:7](package.json#L7) - Updated dev script
+- [.gitignore:3](.gitignore#L3) - .data/ already ignored
+
+**Result:**
+- ✅ Bible verses wrapped at build time in static HTML
+- ✅ Server and client HTML match perfectly
+- ✅ No hydration mismatch errors
+- ✅ Tooltips attach to pre-existing spans via event listeners
+- ✅ Works in both dev mode and production builds
+
+**Why This Approach:**
+- **Tried transformers first:** Nuxt Content v3 transformers don't run reliably (documented issue)
+- **Hook is better:** Runs in both dev and build, simpler API, direct string manipulation
+- **Build-time processing:** Prevents client-side DOM modification during hydration
+- **Performance:** No runtime scanning needed, just attach event listeners
+
 ### Menu Ordering & Alias Link Fixes (2025-10-24)
 **Problem:** Menu items appeared in incorrect order when submenus were present. Alias links (e.g., `- 'The Son': ../nature`) didn't render when the target page was already listed elsewhere in the menu.
 
