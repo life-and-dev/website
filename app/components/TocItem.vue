@@ -2,7 +2,7 @@
   <div
     class="toc-item"
     :class="{ 'is-active': isActive }"
-    :style="{ paddingLeft: `${(item.level - 1) * 16}px` }"
+    :style="{ paddingLeft: `${item.level * 16}px` }"
     @click="handleClick"
   >
     <span class="toc-text">{{ item.text }}</span>
@@ -44,8 +44,6 @@ function handleClick() {
 
 .toc-item.is-active {
   background-color: rgba(var(--v-theme-primary), 0.12);
-  border-left: 3px solid rgb(var(--v-theme-primary));
-  padding-left: calc((var(--level, 0) - 1) * 16px + 9px);
 }
 
 .toc-text {

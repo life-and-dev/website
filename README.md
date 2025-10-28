@@ -255,7 +255,7 @@ Matthew 5:3-12 (NIV)
 Psalm 23 (KJV)
 John 14:16,26  # Shorthand for multiple verses
 ```
-*Automatically enhanced with tooltips showing verse text (World English Bible translation) + links to BibleGateway and BibleHub interlinear*
+*Automatically enhanced with tooltips showing verse text (100+ translations via Bolls.life API, defaults to ESV) + links to BibleGateway and BibleHub interlinear. Icons use Material Design Icons (MDI) from CDN with Noto Sans font fallback for Hebrew/Greek characters.*
 
 ### Image Guidelines
 
@@ -887,12 +887,12 @@ npm run dev
 * API error in browser console
 
 **Cause:**
-Bible API (bible-api.com) returns verse text in World English Bible (WEB) translation. If API is unavailable, tooltip shows fallback text with links only.
+Bible tooltips use Bolls.life API to fetch verse text (supports 100+ translations, defaults to ESV). If API is unavailable, tooltip shows fallback text with links only.
 
 **Check:**
 ```bash
-# Test API directly
-curl "https://bible-api.com/John%203:16"
+# Test API directly (ESV translation, John 3:16, book 43, chapter 3, verse 16)
+curl "https://bolls.life/get-verse/ESV/43/3/16/"
 # Should return JSON with verse text
 ```
 
@@ -900,6 +900,12 @@ curl "https://bible-api.com/John%203:16"
 * API unavailability is temporary - retry later
 * Links to BibleGateway and BibleHub still work (external sites)
 * No code changes needed - API issue resolves itself
+
+**Icons Not Showing on Android:**
+Bible tooltip icons use Material Design Icons (book icon) and Noto Sans font (Hebrew/Greek `אΩ` characters) loaded from CDN. If icons don't appear:
+* Check network tab for failed CDN requests (jsDelivr for MDI, Google Fonts for Noto Sans)
+* Ensure Content Security Policy (CSP) allows CDN domains
+* CDN fonts are cached by browser for performance
 
 ## Migration from Grav CMS
 

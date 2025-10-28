@@ -184,8 +184,8 @@ export default defineNuxtPlugin((nuxtApp) => {
         <div class="bible-tooltip-title">${title}</div>
         <div class="bible-tooltip-text">${verseData.text}</div>
         <div class="bible-tooltip-footer">
-          <a href="${bibleGatewayUrl}" target="_blank" rel="noopener noreferrer" class="bible-tooltip-link"><span style="font-size: 1.5em">🕮</span><span class="bible-tooltip-link-text">Full Context</span></a>
-          <a href="${bibleHubUrl}" target="_blank" rel="noopener noreferrer" class="bible-tooltip-link"><span style="font-size: 1.5em">אΩ</span><span class="bible-tooltip-link-text">Interlinear</span></a>
+          <a href="${bibleGatewayUrl}" target="_blank" rel="noopener noreferrer" class="bible-tooltip-link"><i class="mdi mdi-book-open-variant"></i><span class="bible-tooltip-link-text">Full Context</span></a>
+          <a href="${bibleHubUrl}" target="_blank" rel="noopener noreferrer" class="bible-tooltip-link"><span class="bible-tooltip-hebrew-greek">אΩ</span><span class="bible-tooltip-link-text">Interlinear</span></a>
         </div>
       `
 

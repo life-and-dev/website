@@ -64,15 +64,19 @@
   gap: 0.25rem;
 }
 
-.bible-tooltip-link-text:hover {
-  text-decoration: underline;
+/* Bible Tooltip Link Icons (Material Design Icons) */
+.bible-tooltip-link i.mdi {
+  font-size: 1.25rem;
 }
 
-/* Bible Tooltip Link Icons */
-.bible-tooltip-icon {
-  width: 0.875rem;
-  height: 0.875rem;
-  fill: currentColor;
+/* Bible Tooltip Hebrew/Greek Characters with Font Fallback */
+.bible-tooltip-hebrew-greek {
+  font-family: 'Noto Sans', sans-serif;
+  font-size: 1.5em;
+}
+
+.bible-tooltip-link-text:hover {
+  text-decoration: underline;
 }
 
 /* Bible Reference Spans (in content) */

@@ -90,6 +90,69 @@ npm run dev:cached  # Keeps cache, faster startup (use when hook unchanged)
 - **Build-time processing:** Prevents client-side DOM modification during hydration
 - **Performance:** No runtime scanning needed, just attach event listeners
 
+### CDN Fonts with Fallbacks for Bible Tooltips (2025-10-27)
+**Problem:** Bible verse tooltip icons (book emoji `🕮` U+1F56E and Hebrew/Greek characters `אΩ`) failed to render on Android devices due to missing glyphs in the default system font. Users saw empty boxes instead of icons.
+
+**Root Cause:** Android's default font (Roboto) doesn't include all Unicode emoji characters or Hebrew/Greek special symbols. The book emoji and Hebrew/Greek characters used in tooltips were missing from the font, causing rendering failures.
+
+**Solution:** Use CDN fonts with fallbacks - Material Design Icons from CDN for the book icon, and Noto Sans font fallback for Hebrew/Greek characters `אΩ`.
+
+**Implementation:**
+```typescript
+// bible-tooltips.client.ts - Line 187-188
+// Book icon: Replace emoji with Material Design Icon
+// BEFORE: <span style="font-size: 1.5em">🕮</span>
+// AFTER:  <i class="mdi mdi-book-open-variant"></i>
+
+// Hebrew/Greek: Keep original characters but add font fallback in CSS
+// <span class="bible-tooltip-hebrew-greek">אΩ</span>
+```
+
+**Icon/Symbol Choices:**
+- **Full Context link:** `mdi-book-open-variant` (Material Design Icon) - Represents reading Bible passages in full context
+- **Interlinear link:** `אΩ` (Hebrew Aleph + Greek Omega) with Noto Sans fallback - Represents Hebrew/Greek original language study
+
+**Files Modified:**
+- [nuxt.config.ts:52-53](nuxt.config.ts#L52-L53) - Added CDN links for MDI and Noto Sans fonts
+- [bible-tooltips.client.ts:187-188](app/plugins/bible-tooltips.client.ts#L187-L188) - Updated book icon to MDI, wrapped Hebrew/Greek in styled span
+- [bible-tooltips.css:68-76](app/assets/css/bible-tooltips.css#L68-L76) - Added MDI icon sizing and Noto Sans fallback for Hebrew/Greek
+
+**CDN Configuration:**
+```typescript
+// nuxt.config.ts - app.head.link
+{ rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css' },
+{ rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&display=swap' }
+```
+
+**CSS Fallback:**
+```css
+/* Material Design Icon sizing */
+.bible-tooltip-link i.mdi {
+  font-size: 1.25rem;
+}
+
+/* Noto Sans fallback for Hebrew/Greek */
+.bible-tooltip-hebrew-greek {
+  font-family: 'Noto Sans', sans-serif;
+  font-size: 1.5em;
+}
+```
+
+**Result:**
+- ✅ Icons render correctly on all platforms including Android
+- ✅ Consistent with Material Design aesthetic (matches Vuetify UI)
+- ✅ CDN-hosted fonts with browser caching benefits
+- ✅ Hebrew/Greek characters `אΩ` more semantically accurate than Chinese translation icon
+- ✅ Noto Sans fallback ensures Hebrew/Greek characters render on all devices
+- ✅ Proper semantic markup with `<i>` tags for icons and styled spans for text
+
+**Why This Approach:**
+- **CDN Benefits:** Browser caching, global CDN distribution, automatic updates
+- **Font Fallbacks:** Noto Sans ensures Hebrew/Greek characters render on all platforms
+- **Semantic Accuracy:** `אΩ` (Aleph-Omega) better represents Hebrew/Greek than `mdi-translate` (Chinese symbols)
+- **Performance:** CDN fonts are cached across sites, reducing load times
+- **Consistency:** MDI matches existing Vuetify UI (AppBar uses `mdi-menu`, `mdi-printer`, etc.)
+
 ### Menu Ordering & Alias Link Fixes (2025-10-24)
 **Problem:** Menu items appeared in incorrect order when submenus were present. Alias links (e.g., `- 'The Son': ../nature`) didn't render when the target page was already listed elsewhere in the menu.
 
