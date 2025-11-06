@@ -1,7 +1,7 @@
 <template>
   <v-app-bar
     height="56"
-    class="app-bar"
+    :class="['app-bar', { 'sidebars-visible': sidebarsVisible }]"
     flat
   >
     <!-- Hamburger menu (always visible) -->
@@ -9,7 +9,6 @@
       <template v-slot:activator="{ props }">
         <v-app-bar-nav-icon
           v-bind="props"
-          class="mr-2"
           icon="mdi-menu"
           @click="$emit('toggle-menu')"
         />
@@ -29,7 +28,7 @@
 
     <v-tooltip text="Print page" location="bottom">
       <template v-slot:activator="{ props }">
-        <v-btn v-bind="props" icon="mdi-printer" @click="handlePrint" class="mr-2" />
+        <v-btn v-bind="props" icon="mdi-printer" @click="handlePrint" />
       </template>
     </v-tooltip>
 
@@ -41,7 +40,6 @@
           :href="editUrl"
           target="_blank"
           rel="noopener noreferrer"
-          class="mr-2"
         />
       </template>
     </v-tooltip>
@@ -52,6 +50,10 @@
 <script setup lang="ts">
 import { generateBreadcrumbs } from '~/composables/useBreadcrumbs'
 import type { BreadcrumbItem } from '~/composables/useBreadcrumbs'
+
+const props = defineProps<{
+  sidebarsVisible?: boolean
+}>()
 
 const emit = defineEmits<{
   'toggle-menu': []
@@ -91,9 +93,27 @@ const handlePrint = () => {
   .app-bar :deep(.v-toolbar__content) {
     padding-left: 0.5rem;
     padding-right: 0.5rem;
-    margin-left: 280px;
-    margin-right: 240px;
-    max-width: calc(100vw - 280px - 240px);
+    margin-left: 0;
+    margin-right: 0;
+    max-width: 100vw;
+    transition: margin-left 0.3s ease, margin-right 0.3s ease, max-width 0.3s ease;
+  }
+
+  /* When sidebars are visible, add margins */
+  .app-bar.sidebars-visible :deep(.v-toolbar__content) {
+    margin-left: 320px;
+    margin-right: 320px;
+    max-width: calc(100vw - 320px - 320px);
+  }
+
+  /* Adjust left icon margin when sidebars are visible */
+  .app-bar.sidebars-visible :deep(.v-app-bar-nav-icon) {
+    margin-left: 0.5rem;
+  }
+
+  /* Adjust right icon margins when sidebars are visible */
+  .app-bar.sidebars-visible :deep(.v-btn:last-child) {
+    margin-right: 0.5rem;
   }
 }
 

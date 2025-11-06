@@ -376,9 +376,59 @@ export function createBibleHubInterlinearUrl(reference: string): string {
 
 **Result:** Users can access original Greek/Hebrew interlinear translations directly from verse tooltips.
 
+### AppBar Dynamic Margins (2025-11-06)
+**Problem:** After increasing sidebar widths from 280px/240px to 320px, the AppBar menu icon (left) and edit/print icons (right) overlapped with the sidebars. Additionally, when sidebars were toggled off, the icons needed to adjust their margins to match the content area.
+
+**Root Cause:** AppBar had hardcoded margins (280px left, 240px right) that didn't match the new 320px sidebar width. Icons didn't adjust dynamically when sidebars were toggled.
+
+**Solution:** Make AppBar margins reactive to sidebar visibility state with CSS transitions:
+```typescript
+// AppBar.vue - Add prop and dynamic class
+const props = defineProps<{
+  sidebarsVisible?: boolean
+}>()
+
+:class="['app-bar', { 'sidebars-visible': sidebarsVisible }]"
+```
+
+```css
+/* Base state: no margins when sidebars hidden */
+.app-bar :deep(.v-toolbar__content) {
+  margin-left: 0;
+  margin-right: 0;
+  transition: margin-left 0.3s ease, margin-right 0.3s ease;
+}
+
+/* Active state: 320px margins when sidebars visible */
+.app-bar.sidebars-visible :deep(.v-toolbar__content) {
+  margin-left: 320px;
+  margin-right: 320px;
+}
+
+/* Icon spacing when sidebars visible */
+.app-bar.sidebars-visible :deep(.v-app-bar-nav-icon) {
+  margin-left: 0.5rem;
+}
+.app-bar.sidebars-visible :deep(.v-btn:last-child) {
+  margin-right: 0.5rem;
+}
+```
+
+**Files Modified:**
+- [AppBar.vue:4](app/components/AppBar.vue#L4) - Added `sidebarsVisible` prop and dynamic class binding
+- [AppBar.vue:86-118](app/components/AppBar.vue#L86-L118) - Updated CSS with transitions and conditional margins
+- [default.vue:5](app/layouts/default.vue#L5) - Pass `sidebarsVisible` state to AppBar
+
+**Result:**
+- ✅ Icons no longer overlap with 320px sidebars
+- ✅ Margins smoothly transition when toggling sidebars (0.3s animation)
+- ✅ Icons adjust spacing dynamically based on sidebar state
+- ✅ Matches content area behavior (expands when sidebars hidden)
+
 ### Layout & Styling (2025-10-12 to 2025-10-13)
 **Key Decisions:**
 - **VNavigationDrawer**: Use Vuetify components with `position: fixed !important` CSS override for MD3 styling + sticky behavior
+- **Sidebar Width**: 320px for both navigation and TOC drawers (increased from 280px/240px on 2025-11-06)
 - **Layout**: Standard page scrolling, sidebars slide in/out with `transform: translateX`, no smart-scroll complexity
 - **MD3 Inputs**: `VTextField` defaults set to `rounded="pill"` in `nuxt.config.ts` for semi-circular ends
 - **Background Colors**: Force `bg-surface-rail` on mobile expansion panels for consistency

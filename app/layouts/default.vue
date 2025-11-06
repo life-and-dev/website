@@ -1,7 +1,10 @@
 <template>
   <v-app>
     <!-- App Bar -->
-    <AppBar @toggle-menu="handleToggleMenu" />
+    <AppBar
+      :sidebars-visible="mdAndUp && sidebarsVisible"
+      @toggle-menu="handleToggleMenu"
+    />
 
     <!-- Desktop Layout (md and up) -->
     <div v-if="mdAndUp" class="desktop-wrapper">
