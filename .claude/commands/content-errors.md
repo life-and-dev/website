@@ -11,11 +11,10 @@ Fix the following problems:
 - [ ] Convert underscore markdown headers `-------` to hashed headers prefixed with `##`
 - [ ] Convert ` -- ` double hyphens that are surrounded by spaces, to a single em dash (keep the spaces around the em dash).
 - [ ] Quoted sources are format `> Quoted text — Source`. Note the the em dash and that there are spaces on both sides of the em dash. The source could be a bible verse, a name of another author or book, or a link to an external website.
-- [ ] Frontmatter minimal (no title/published/navigation fields)
+- [ ] Markdown may contain double spaces before line end characters. This is normal as it indicate a line break. Do not remove those spaces.
 - [ ] File extension: .md for published, .draft.md for unpublished
 - [ ] Ensure that markdown links within the same document to anchors/headers are valid, for example `#some-header-in-same-doc`
 - [ ] Internal links use .md extension: `[text](path/page.md)`
-- [ ] Convert all absolute internal links to relative links, for example `../history/page.md`
 - [ ] Do not modify external links
 - [ ] Fragments preserved: `path/page.md#anchor`
 - [ ] Images co-located in same directory as markdown, unless it links to an external website
