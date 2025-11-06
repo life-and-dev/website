@@ -12,7 +12,7 @@
           permanent
           absolute
           location="left"
-          width="280"
+          width="320"
           :touchless="true"
           :scrim="false"
           :disableRouteWatcher="true"
@@ -40,7 +40,7 @@
           permanent
           absolute
           location="right"
-          width="240"
+          width="320"
           :touchless="true"
           :scrim="false"
           :disableRouteWatcher="true"
