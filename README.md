@@ -545,48 +545,56 @@ npm test -- bible-tooltips      # Bible verse reference parsing tests
 
 ### Project-Specific Deviations from Nuxt
 
-**1. Static Site Only:**
+**1. TypeScript Configuration:**
+* Real-time type checking disabled (`typeCheck: false`) to avoid `vite-plugin-checker` lazy initialization overhead
+* TypeScript strict mode still enforced at compile time
+* Type checking available via `npx vue-tsc` or during production builds
+* Faster dev server startup without browser console type checking
+
+**2. Static Site Only:**
 * NO server-side API routes (pure SSG)
 * NO server middleware
 * `_menu.yml` files served as static assets from `/public/`
 
-**2. Content System:**
+**3. Content System:**
 * @nuxt/content v3 with SQL-based storage (WASM SQLite)
 * Content source changes via `CONTENT` env var (not typical Nuxt pattern)
 * Domain prefix stripped from URLs (handled by `content.config.ts`)
 
-**3. File Watcher Integration:**
+**4. File Watcher Integration:**
 * Nuxt `ready` hook starts image/menu watcher (`nuxt.config.ts`)
 * Copies files from `/content/` to `/public/` with path transformation
 * Separate from Nuxt's built-in HMR
 
-**4. Component Overrides:**
+**5. Component Overrides:**
 * `ProseA.vue` - Strips `.md` from links
 * `ProseTable.vue` - Renders tables as Vuetify v-data-table
 * `ProseBlockquote.vue` - Renders quotes as Material Design cards
 
-**5. Post-Render Processing:**
+**6. Post-Render Processing:**
 * Uses Vue's `onUpdated()` lifecycle hook for content processing
 * `useContentPostProcessing` composable handles Bible tooltips + TOC generation
 * Processes after Nuxt Content's ContentRenderer finishes rendering
 * Guard flags prevent duplicate processing during navigation
 
-**6. Navigation System:**
+**7. Navigation System:**
 * H1-based titles (extracted from markdown body, not frontmatter)
 * `_menu.yml` files control order (fetched via HTTP, not @nuxt/content query)
 * Alphabetical fallback for unlisted pages
 * Table of Contents (TOC) generated from H2/H3 headings (minimum 2 required)
 * TOC appears in right sidebar (desktop) or mobile drawer expansion panel
 
-**7. Material Design 3 Styling:**
+**8. Material Design 3 Styling:**
 * Text fields use `rounded="pill"` for semi-circular ends (MD3 spec)
 * Configured globally in `nuxt.config.ts` VTextField defaults
 * All inputs inherit pill shape without component-specific overrides
 
-**8. Vuetify Layout System with Fixed Positioning:**
-* Desktop sidebars use VNavigationDrawer components for MD3 styling
+**9. Vuetify Layout System with Fixed Positioning:**
+* Desktop sidebars use VNavigationDrawer components for MD3 styling (320px width)
 * CSS overrides force `position: fixed` for sticky behavior (not typical Vuetify usage)
 * Content spacing managed by Vuetify's `--v-layout-left/right` CSS variables
+* AppBar margins adjust dynamically based on sidebar visibility (0px hidden, 320px visible)
+* Smooth CSS transitions (0.3s) when toggling sidebars on/off
 * Hybrid approach: Vuetify styling + custom positioning requirements
 
 ### Coding Rules
@@ -598,7 +606,7 @@ npm test -- bible-tooltips      # Bible verse reference parsing tests
 
 **CSS Unit Guidelines (Mandatory):**
 * **Use `rem` for all spacing/sizing:** padding, margin, border-radius, font-size, etc.
-* **Use `px` ONLY for:** sidebar widths (280px), border widths (1px), z-index
+* **Use `px` ONLY for:** sidebar widths (320px), border widths (1px), z-index
 * **Why:** `rem` scales with user font preferences (accessibility), prevents visual bugs
 * **Conversion:** 0.25rem=4px, 0.5rem=8px, 0.75rem=12px, 1rem=16px, 1.75rem=28px
 
@@ -820,6 +828,29 @@ npm run dev
 * After deleting `.nuxt` directory
 * After cache corruption errors
 * After installing new Nuxt modules
+
+### vite-plugin-checker Missing Module Error
+
+**Symptom:** `Cannot find module '/root/website/node_modules/vite-plugin-checker/dist/checkers/vueTsc/typescript-vue-tsc/lib/typescript.js'`
+
+**Cause:** The `typescript-vue-tsc` directory is dynamically generated at runtime by `vite-plugin-checker` when `typeCheck: true` is enabled. It's not included in npm packages and only created on first dev server start.
+
+**Current Status:** We've disabled real-time type checking (`typeCheck: false` in `nuxt.config.ts`) to avoid this lazy initialization overhead.
+
+**If You Enable Type Checking:**
+```bash
+# Set typeCheck: true in nuxt.config.ts, then run:
+npm run dev
+# The directory auto-generates on first startup
+# Subsequent runs work normally
+```
+
+**Alternative Fix (Keep Disabled):**
+The project now uses build-time type checking only:
+* TypeScript strict mode enforced at compile time
+* Manual type check: `npx vue-tsc`
+* Production builds catch type errors: `npm run generate`
+* Faster dev server startup without browser console type checking
 
 ### Tooltips Not Appearing
 

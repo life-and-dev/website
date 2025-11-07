@@ -15,11 +15,11 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@nuxt/content": "^3.7.1",
-    "@types/node": "^24.5.2",
+    "@nuxt/content": "^3.8.0",
+    "@types/node": "^24.10.0",
     "better-sqlite3": "^12.4.1",
     "gray-matter": "^4.0.3",
-    "nuxt": "^4.1.2",
+    "nuxt": "^4.2.1",
     "typescript": "^5.9.3",
     "vue": "^3.5.23",
     "vue-router": "^4.6.3",
@@ -28,14 +28,14 @@
     "yaml": "^2.8.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.55.1",
+    "@playwright/test": "^1.56.1",
     "@types/fs-extra": "^11.0.4",
-    "@vitest/ui": "^3.2.4",
+    "@vitest/ui": "^4.0.7",
     "chokidar": "^4.0.3",
     "fs-extra": "^11.3.2",
-    "playwright": "^1.55.1",
-    "sharp": "^0.34.4",
+    "playwright": "^1.56.1",
+    "sharp": "^0.34.5",
     "tsx": "^4.20.6",
-    "vitest": "^3.2.4"
+    "vitest": "^4.0.7"
   }
 }

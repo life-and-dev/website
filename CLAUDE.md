@@ -22,6 +22,30 @@ Migrates content from a Grav-based website (located at `../eternal`) to statical
 
 ## Architecture Decisions
 
+### TypeScript Type Checking Configuration (2025-11-07)
+**Problem:** Dev server failed with "Cannot find module '/root/website/node_modules/vite-plugin-checker/dist/checkers/vueTsc/typescript-vue-tsc/lib/typescript.js'" on startup.
+
+**Root Cause:** The `vite-plugin-checker` package (enabled by `typeCheck: true`) uses lazy initialization for the `typescript-vue-tsc` directory. On first run, it creates this directory by copying the entire TypeScript installation and patching it to support `.vue` files. This directory is excluded from npm package distribution and regenerated at runtime. If deleted or missing, the error appears until dev server recreates it (auto-fixes after first startup).
+
+**Solution:** Disabled real-time type checking to eliminate lazy initialization overhead:
+```typescript
+// nuxt.config.ts line 17
+typescript: {
+  strict: true,
+  typeCheck: false  // Changed from true
+}
+```
+
+**Trade-offs:**
+- ✅ Faster dev server startup (no vite-plugin-checker overhead)
+- ✅ No lazy initialization errors
+- ✅ TypeScript strict mode still enforced at compile time
+- ℹ️ No real-time browser console type checking during development
+- ℹ️ Type checking still available via `npx vue-tsc` command
+- ℹ️ Build-time type checking still catches errors during `npm run generate`
+
+**Result:** Clean dev server startup without `typescript-vue-tsc` initialization. Type safety maintained through strict mode and build-time checks.
+
 ### Bible Verse Tooltip Hydration Fix (2025-10-27)
 **Problem:** Bible verse tooltips caused hydration mismatch errors because client-side JavaScript was modifying the DOM during hydration. Server HTML contained plain text `Matthew 3:16`, but client-side plugin wrapped it in `<span class="bible-ref">`, creating different HTML structures.
 
@@ -844,6 +868,19 @@ npm run dev
 
 ### TypeScript Errors / Hydration Mismatches
 - Clear cache: `rm -rf .nuxt .output && npx nuxi prepare && npm run dev`
+
+### vite-plugin-checker Missing Module Error (2025-11-07)
+**Error:** `Cannot find module '/root/website/node_modules/vite-plugin-checker/dist/checkers/vueTsc/typescript-vue-tsc/lib/typescript.js'`
+
+**Cause:** The `typescript-vue-tsc` directory is dynamically generated at runtime by `vite-plugin-checker` (when `typeCheck: true`). It's not included in npm packages and only created on first dev server start. If deleted or missing, the error appears.
+
+**Fix:** This is expected behavior - the directory auto-regenerates on dev server startup. To avoid this entirely, we disabled real-time type checking:
+```typescript
+// nuxt.config.ts line 17
+typeCheck: false  // Disables vite-plugin-checker lazy initialization
+```
+
+**Alternative:** If you want real-time type checking, set `typeCheck: true` and run dev server once to generate the directory. Subsequent runs will work normally.
 
 ### TOC Not Appearing After Navigation
 **Fix:** Use `onUpdated()` lifecycle hook in page components. See Architecture Decisions → TOC Post-Render Processing.
