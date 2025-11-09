@@ -135,6 +135,7 @@ export default defineNuxtConfig({
       const domainNames: Record<string, string> = {
         ofgod: 'Our Father God',
         kingdom: 'Kingdom of God',
+        prophecies: 'Prophecies of God',
         son: 'Son of God',
         church: 'Church of God',
         word: 'Word of God'

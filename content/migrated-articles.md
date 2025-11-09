@@ -27,5 +27,5 @@
 * https://eternal.family.net.za/bible/history -> https://word.ofgod.info/history
 * https://eternal.family.net.za/bible/translations -> https://word.ofgod.info/translations
 * https://eternal.family.net.za/god/son/body -> https://kingdom.ofgod.info/christ/body
-* https://eternal.family.net.za/god/son/prophecies -> https://kingdom.ofgod.info/christ/prophecies
+* https://eternal.family.net.za/god/son/prophecies -> https://prophecies.ofgod.info/messianic
 * https://eternal.family.net.za/kingdom -> https://church.ofgod.info/kingdom

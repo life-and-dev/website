@@ -6,13 +6,14 @@ The following domains exist:
 
 # Domain Table
 
-| directory | published domain           |
-|-----------|----------------------------|
-| ofgod     | https://ofgod.info         |
-| son       | https://son.ofgod.info     |
-| kingdom   | https://kingdom.ofgod.info |
-| church    | https://church.ofgod.info  |
-| word      | https://word.ofgod.info    |
+| directory  | published domain              |
+|------------|-------------------------------|
+| church     | https://church.ofgod.info     |
+| kingdom    | https://kingdom.ofgod.info    |
+| ofgod      | https://ofgod.info            |
+| prophecies | https://prophecies.ofgod.info |
+| son        | https://son.ofgod.info        |
+| word       | https://word.ofgod.info       |
 
 Here is the table of keywords to scan in the article. Make sure the keyword is used in the context described next to it before creating the link.
 

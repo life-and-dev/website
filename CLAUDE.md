@@ -645,17 +645,6 @@ npm test -- useSearchRelevance # Run search relevance tests
 npm test -- bible-tooltips     # Run Bible reference parsing tests
 ```
 
-### Building for Production
-```bash
-# Build for specific domain
-CONTENT=son npm run generate      # → deploy to son.ofgod.info
-CONTENT=kingdom npm run generate  # → deploy to kingdom.ofgod.info
-CONTENT=church npm run generate   # → deploy to church.ofgod.info
-
-# Preview production build
-npm run preview
-```
-
 ### Content Migration
 ```bash
 # Migrate specific section with images
@@ -702,6 +691,7 @@ git submodule status
 CONTENT=ofgod npm run generate    # → deploy to ofgod.info
 CONTENT=kingdom npm run generate  # → deploy to kingdom.ofgod.info
 CONTENT=church npm run generate   # → deploy to church.ofgod.info
+CONTENT=prophecies npm run generate   # → deploy to prophecies.ofgod.info
 CONTENT=son npm run generate      # → deploy to son.ofgod.info
 CONTENT=word npm run generate     # → deploy to word.ofgod.info
 ```

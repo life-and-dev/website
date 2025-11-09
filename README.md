@@ -23,9 +23,10 @@ This project uses **git submodules** for content management. Each content domain
 
 * **Main Repository:** `life-and-dev/website` - Technical sources (app, scripts, configs)
 * **Content Submodules:** Separate repos for each domain (1 commit each)
-  * `life-and-dev/ofgod` → `/content/ofgod/`
   * `life-and-dev/church` → `/content/church/`
   * `life-and-dev/kingdom` → `/content/kingdom/`
+  * `life-and-dev/ofgod` → `/content/ofgod/`
+  * `life-and-dev/prophecies` → `/content/prophecies/`
   * `life-and-dev/son` → `/content/son/`
   * `life-and-dev/word` → `/content/word/`
 
@@ -35,9 +36,6 @@ This project uses **git submodules** for content management. Each content domain
 * "Edit on GitHub" links point to domain-specific repos
 * Easier access control per content domain
 * Professional presentation on GitHub (single contributor)
-
-**History Architecture:**
-All repositories (main + submodules) use orphan branch technique to maintain single-commit history. Each repo shows only 1 commit authored and committed by `life-and-dev <dev@ofgod.info>`.
 
 **Common Submodule Operations:**
 ```bash
@@ -103,13 +101,6 @@ git submodule status
 
 5. **Visit:** `http://localhost:3000`
 
-### Available Domains
-
-* `son` - son.ofgod.info
-* `kingdom` - kingdom.ofgod.info
-* `church` - church.ofgod.info
-* `ofgod` - ofgod.info (default)
-
 ## Content Layout
 
 ### TLDR
@@ -135,6 +126,7 @@ Content is organized by domain in `/content/{domain}/`:
 ├── son/          → son.ofgod.info
 ├── kingdom/      → kingdom.ofgod.info
 ├── church/       → church.ofgod.info
+├ ...
 └── ofgod/        → ofgod.info (default)
 ```
 
