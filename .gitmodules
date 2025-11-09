@@ -13,3 +13,6 @@
 [submodule "content/word"]
 	path = content/word
 	url = https://github.com/life-and-dev/word.git
+[submodule "content/prophecies"]
+	path = content/prophecies
+	url = https://github.com/life-and-dev/prophecies.git
