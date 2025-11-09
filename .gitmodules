@@ -7,12 +7,12 @@
 [submodule "content/kingdom"]
 	path = content/kingdom
 	url = https://github.com/life-and-dev/kingdom.git
+[submodule "content/prophecies"]
+	path = content/prophecies
+	url = https://github.com/life-and-dev/prophecies.git
 [submodule "content/son"]
 	path = content/son
 	url = https://github.com/life-and-dev/son.git
 [submodule "content/word"]
 	path = content/word
 	url = https://github.com/life-and-dev/word.git
-[submodule "content/prophecies"]
-	path = content/prophecies
-	url = https://github.com/life-and-dev/prophecies.git
