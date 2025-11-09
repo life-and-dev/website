@@ -3,15 +3,13 @@
  */
 export function useGitHubEdit() {
   const route = useRoute()
-  const config = useRuntimeConfig()
   const siteConfig = useSiteConfig()
-  const contentDomain = (config.public.contentDomain || 'eternal') as string
 
   /**
    * Generate GitHub edit URL for current route
    * @returns GitHub edit URL or undefined if not a content page
    */
-  function getEditUrl(): string | undefined {
+  function getEditUrl(): string {
     const path = route.path
 
     // Skip non-content routes

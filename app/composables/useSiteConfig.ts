@@ -23,9 +23,16 @@ const SITE_CONFIGS = {
   },
   ofgod: {
     domain: 'ofgod.info',
-    siteName: 'Of God',
+    siteName: 'Our Father God',
     canonicalBase: 'https://ofgod.info',
     githubRepo: 'life-and-dev/ofgod',
+    githubBranch: 'main'
+  },
+  prophecies: {
+    domain: 'prophecies.ofgod.info',
+    siteName: 'Prophecies of God',
+    canonicalBase: 'https://ofgod.info',
+    githubRepo: 'life-and-dev/prophecies',
     githubBranch: 'main'
   },
   son: {

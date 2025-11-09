@@ -207,7 +207,7 @@ function createKingdomThemes(): Record<string, ThemeDefinition> {
 }
 
 /**
- * Light blue
+ * Dark blue
  */
 function createPropheciesThemes(): Record<string, ThemeDefinition> {
   return {
