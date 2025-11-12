@@ -17,6 +17,7 @@
 * https://eternal.family.net.za/god/son/essence/of-man -> https://son.ofgod.info/son-of-man
 * https://eternal.family.net.za/god/son/essence/of-man/human -> https://son.ofgod/son-of-man/human
 * https://eternal.family.net.za/god/son/essence/of-man/limitations -> https://son.ofgod/son-of-man/limitations
+* https://eternal.family.net.za/kingdom/body -> https://kingdom.ofgod.info/christ/body
 * https://eternal.family.net.za/kingdom/darkness -> https://kingdom.ofgod.info/darkness
 * https://eternal.family.net.za/questions/is-jesus-god -> https://son.ofgod.info/nature 
 * https://eternal.family.net.za/questions/what-is-holy-spirit -> https://son.ofgod.info/trinity/holy-spirit

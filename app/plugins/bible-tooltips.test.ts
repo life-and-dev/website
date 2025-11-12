@@ -256,4 +256,29 @@ describe('Bible Reference Parsing', () => {
 
     expect(newHTML).toBe('Our life is short (<span class="bible-ref">Ecclesiastes 1:2-4</span>) compared to eternity.')
   })
+
+  it('should parse verse ranges followed by colon (list formatting)', () => {
+    const text = '3. Isaiah 53:3-12: "Pierced for our transgressions"'
+    const matches = findAllMatches(text)
+    expect(matches).toEqual(['Isaiah 53:3-12'])
+  })
+
+  it('should parse verse ranges followed by period', () => {
+    const text = 'Read Isaiah 53:3-12.'
+    const matches = findAllMatches(text)
+    expect(matches).toEqual(['Isaiah 53:3-12'])
+  })
+
+  it('should parse single verses followed by colon', () => {
+    const text = 'John 3:16: For God so loved the world'
+    const matches = findAllMatches(text)
+    expect(matches).toEqual(['John 3:16'])
+  })
+
+  it('should NOT match partial cross-chapter references', () => {
+    // Pattern 2 should NOT match "53:3-5" if it's actually "53:3-5:2"
+    const text = 'Isaiah 53:3-5:2 discusses suffering'
+    const matches = findAllMatches(text)
+    expect(matches).toEqual(['Isaiah 53:3-5:2']) // Should match Pattern 1, not Pattern 2
+  })
 })

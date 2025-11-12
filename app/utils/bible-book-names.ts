@@ -27,10 +27,10 @@ export function createBibleReferencePatterns(): RegExp[] {
   return [
     // Cross-chapter range: "2 Corinthians 4:16-5:9 (ESV)"
     new RegExp(`\\b(${bookPattern})\\s+(\\d+):(\\d+)-(\\d+):(\\d+)${translationPattern}\\b`, 'g'),
-    // Same chapter range: "John 3:16-18 (ESV)" - ensure we don't match if followed by another colon
-    new RegExp(`\\b(${bookPattern})\\s+(\\d+):(\\d+)-(\\d+)${translationPattern}\\b(?!:)`, 'g'),
-    // Single verse: "John 3:16 (ESV)" - ensure we don't match if followed by dash or comma
-    new RegExp(`\\b(${bookPattern})\\s+(\\d+):(\\d+)${translationPattern}\\b(?![-:])`, 'g'),
+    // Same chapter range: "John 3:16-18 (ESV)" - ensure we don't match if followed by digits (prevents matching "3:16-5" in "3:16-5:9")
+    new RegExp(`\\b(${bookPattern})\\s+(\\d+):(\\d+)-(\\d+)${translationPattern}\\b(?!\\d)`, 'g'),
+    // Single verse: "John 3:16 (ESV)" - ensure we don't match if followed by dash or digits (allows punctuation like colon, period, comma)
+    new RegExp(`\\b(${bookPattern})\\s+(\\d+):(\\d+)${translationPattern}\\b(?![\\d-])`, 'g'),
     // Chapter only: "John 3 (ESV)", "Psalm 23 (ESV)" - ensure not followed by colon
     new RegExp(`\\b(${bookPattern})\\s+(\\d+)${translationPattern}\\b(?!\\s*:)`, 'g')
   ]
