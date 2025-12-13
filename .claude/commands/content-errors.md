@@ -20,7 +20,7 @@ Fix the following problems:
 - [ ] Images co-located in same directory as markdown, unless it links to an external website
 - [ ] Image naming: `{page}.{descriptor}.{ext}` (avoid duplication if the image has the same name as the page, for example `church.church.jpg`)
 - [ ] Alt text provided for accessibility
-- [ ] Bible verses contains the full bible book name, for example: `John 3:16 (ESV)`
+- [ ] Quoted bible verses contains the full bible book name, for example: `John 3:16 (ESV)`
 - [ ] Shorthand notation correct: `John 14:16,26` (full reference first)
 - [ ] Bible verses of different books are separated by semi-colons `;`, for example: `Genesis 1; Exodus 1:1; Leviticus 1`
 - [ ] Bible verses of the same book but different chapters are separated by a comma and a space `, ` for example `Genesis 1:1, 2:1, 3:1`
