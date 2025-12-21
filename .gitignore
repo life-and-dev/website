@@ -44,5 +44,6 @@ logs
 # Keep static assets
 !/public/robots.txt
 
-# Temporary Claude script files
+# AI assistants
 /.claude/last-spoken.txt
+/.vscode/gemini-mcp/status.json
