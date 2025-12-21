@@ -16,6 +16,7 @@
 * https://eternal.family.net.za/god/father -> https://ofgod.info
 * https://eternal.family.net.za/god/son/essence/as-angel -> https://son.ofgod.info/son-as-angel
 * https://eternal.family.net.za/god/son/essence/as-god/word -> https://son.ofgod.info/word
+* https://eternal.family.net.za/god/god/son/essence/as-god/incarnation/psalm2 -> https://prophecies.ofgod.info/messianic/psalm-2
 * https://eternal.family.net.za/god/son/essence/of-god/temptations -> https://son.ofgod.info/temptations
 * https://eternal.family.net.za/god/son/essence/of-man -> https://son.ofgod.info/son-of-man
 * https://eternal.family.net.za/god/son/essence/of-man/human -> https://son.ofgod/son-of-man/human
