@@ -13,6 +13,7 @@
 * https://eternal.family.net.za/bible/doctrines/trinitarian/3-witnesses -> https://son.ofgod.info/trinity/3-witnesses
 * https://eternal.family.net.za/bible/doctrines/trinitarian/baptism-formula -> https://son.ofgod.info/trinity/baptism-formula
 * https://eternal.family.net.za/bible/inspired -> https://word.ofgod.info/inspired
+* https://eternal.family.net.za/bible/interpretations/day-of-rest -> https://church.ofgod.info/terms/sundays
 * https://eternal.family.net.za/bible/metaphors/light -> https://kingdom.ofgod.info/light
 * https://eternal.family.net.za/god/father -> https://ofgod.info
 * https://eternal.family.net.za/god/son/essence/as-angel -> https://son.ofgod.info/son-as-angel
