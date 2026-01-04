@@ -113,4 +113,31 @@ onMounted(() => {
 .original-table tr:hover {
   background-color: rgba(var(--v-theme-on-surface), 0.04);
 }
+
+/* Style lists and line breaks within table cells */
+.prose-table-wrapper :deep(.v-data-table) ul,
+.prose-table-wrapper :deep(.v-data-table) ol {
+  margin: 0.25rem 0;
+  padding-left: 1.25rem;
+  list-style-position: outside;
+}
+
+.prose-table-wrapper :deep(.v-data-table) ul {
+  list-style-type: disc;
+}
+
+.prose-table-wrapper :deep(.v-data-table) ol {
+  list-style-type: decimal;
+}
+
+.prose-table-wrapper :deep(.v-data-table) li {
+  margin: 0.25rem 0;
+  line-height: 1.5;
+}
+
+.prose-table-wrapper :deep(.v-data-table) br {
+  display: block;
+  content: "";
+  margin-top: 0.375rem;
+}
 </style>

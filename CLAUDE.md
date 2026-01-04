@@ -22,6 +22,37 @@ Migrates content from a Grav-based website (located at `../eternal`) to statical
 
 ## Architecture Decisions
 
+### Table HTML Rendering Support (2026-01-04)
+**Problem:** Markdown tables with `<br/>` tags and bullet points (`<ul>`, `<ol>`, `<li>`) were not rendering correctly. The table parser only detected basic HTML elements (`a`, `strong`, `em`, `code`, `span`), treating cells with line breaks or lists as plain text, which stripped the HTML formatting.
+
+**Solution:** Extended HTML detection to include block-level and list elements, plus added CSS styling:
+
+```typescript
+// useTableParser.ts - Expanded HTML element detection
+const hasHtml = cell.querySelector('a, strong, em, code, span, br, ul, ol, li, p, div')
+```
+
+```css
+/* ProseTable.vue - Added styles for lists and line breaks in cells */
+.prose-table-wrapper :deep(.v-data-table) ul,
+.prose-table-wrapper :deep(.v-data-table) ol {
+  margin: 0.25rem 0;
+  padding-left: 1.25rem;
+  list-style-position: outside;
+}
+
+.prose-table-wrapper :deep(.v-data-table) br {
+  display: block;
+  margin-top: 0.375rem;
+}
+```
+
+**Files Modified:**
+- [useTableParser.ts:65](app/composables/useTableParser.ts#L65) - Extended HTML detection
+- [ProseTable.vue:113-141](app/components/content/ProseTable.vue#L113-L141) - Added list/br styling
+
+**Result:** Tables now support complex markdown content including `<br/>` line breaks, `- bullet` lists, and numbered lists with proper formatting.
+
 ### Bible Verse Detection with Trailing Punctuation (2025-11-13)
 **Problem:** Bible references followed by punctuation (e.g., `Isaiah 53:3-12:` in list formatting) were not detected. The regex patterns used negative lookahead `(?!:)` and `(?![-:])` that rejected matches followed by colons.
 
@@ -31,7 +62,7 @@ Migrates content from a Grav-based website (located at `../eternal`) to statical
 // Pattern 2 (same-chapter ranges): Changed (?!:) to (?!\d)
 new RegExp(`\\b(${bookPattern})\\s+(\\d+):(\\d+)-(\\d+)${translationPattern}\\b(?!\\d)`, 'g')
 
-// Pattern 3 (single verses): Changed (?![-:]) to (?![\d-])
+// Pattern 3 (single verses): Changed (?![-:]) to (?![\\d-])
 new RegExp(`\\b(${bookPattern})\\s+(\\d+):(\\d+)${translationPattern}\\b(?![\\d-])`, 'g')
 ```
 

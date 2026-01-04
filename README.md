@@ -212,11 +212,17 @@ description: Brief page description for SEO and navigation tooltips
 **Tables:**
 ```markdown
 | Header 1 | Header 2 |
-|----------|----------|
+| -------- | -------- |
 | Cell 1   | Cell 2   |
 | Cell 3   | Cell 4   |
+
+# Complex tables with HTML
+| Year | Events                                                                     |
+| ---- | -------------------------------------------------------------------------- |
+| 325  | First Council<br/>Nicene Creed established<br/>Trinity doctrine formalized |
+| 381  | Second Council:<br/>- Expanded the Creed<br/>- Defined Holy Spirit role    |
 ```
-*Automatically rendered as Material Design v-data-table with sorting*
+*Automatically rendered as Material Design v-data-table with sorting. Supports HTML including `<br/>` line breaks and lists (`<ul>`, `<ol>`, `<li>`)*
 
 **Blockquotes:**
 ```markdown

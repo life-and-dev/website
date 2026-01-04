@@ -61,8 +61,8 @@ function parseRows(
       // Use header key if available, otherwise fallback to col-N
       const key = headers[colIndex]?.key || `col-${colIndex}`
 
-      // Check if cell contains HTML (links, formatting, etc.)
-      const hasHtml = cell.querySelector('a, strong, em, code, span')
+      // Check if cell contains HTML (links, formatting, line breaks, lists, etc.)
+      const hasHtml = cell.querySelector('a, strong, em, code, span, br, ul, ol, li, p, div')
 
       if (hasHtml) {
         // Store innerHTML for complex content
