@@ -28,7 +28,7 @@ function createOFGodThemes(): Record<string, ThemeDefinition> {
         'on-primary': '#ffffff',
         'on-secondary': '#ffffff',
         'on-selectable': '#24292f',
-        'on-selected': '#ffffff',
+        'on-selected': '#000000',
         'on-error': '#ffffff',
         'on-warning': '#ffffff',
         'on-info': '#ffffff',
