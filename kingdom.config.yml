@@ -1,4 +1,6 @@
-content.git.repo: https://github.com/life-and-dev/kingdom
+content:
+  git:
+    repo: https://github.com/life-and-dev/kingdom
 siteName: 'The Kingdom of God'
 themes:
   light:

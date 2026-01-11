@@ -1,4 +1,6 @@
-content.git.repo: https://github.com/life-and-dev/ofgod
+content:
+  git:
+    repo: https://github.com/life-and-dev/ofgod
 features:
   bibleTooltips: true
 siteName: 'Our Father God'

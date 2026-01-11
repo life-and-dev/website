@@ -1,4 +1,6 @@
-content.git.repo: https://github.com/life-and-dev/word
+content:
+  git:
+    repo: https://github.com/life-and-dev/word
 siteName: 'The Word of God'
 themes:
   light:

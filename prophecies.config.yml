@@ -1,4 +1,6 @@
-content.git.repo: https://github.com/life-and-dev/prophecies
+content:
+  git:
+    repo: https://github.com/life-and-dev/prophecies
 siteName: 'Prophecies of God'
 themes:
   light:
