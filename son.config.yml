@@ -1,7 +1,12 @@
 content:
   git:
     repo: https://github.com/life-and-dev/son
-siteName: 'The Son of God'
+features:
+  bibleTooltips: true
+  sourceEdit: true
+site:
+  canonical: https://son.ofgod.info
+  name: The Son of God
 themes:
   light:
     colors:

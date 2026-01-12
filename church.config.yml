@@ -1,7 +1,12 @@
 content:
   git:
     repo: https://github.com/life-and-dev/church
-siteName: 'The Church of God'
+features:
+  bibleTooltips: true
+  sourceEdit: true
+site:
+  canonical: https://church.ofgod.info
+  name: The Church of God
 themes:
   light:
     colors:

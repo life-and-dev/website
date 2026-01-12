@@ -1,7 +1,12 @@
 content:
   git:
     repo: https://github.com/life-and-dev/kingdom
-siteName: 'The Kingdom of God'
+features:
+  bibleTooltips: true
+  sourceEdit: true
+site:
+  canonical: https://kingdom.ofgod.info
+  name: The Kingdom of God
 themes:
   light:
     colors:

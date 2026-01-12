@@ -1,7 +1,12 @@
 content:
   git:
     repo: https://github.com/life-and-dev/word
-siteName: 'The Word of God'
+features:
+  bibleTooltips: true
+  sourceEdit: true
+site:
+  canonical: https://word.ofgod.info
+  name: The Word of God
 themes:
   light:
     colors:

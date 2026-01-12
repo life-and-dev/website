@@ -3,7 +3,10 @@ content:
     repo: https://github.com/life-and-dev/ofgod
 features:
   bibleTooltips: true
-siteName: 'Our Father God'
+  sourceEdit: true
+site:
+  canonical: https://ofgod.info
+  name: Our Father God
 themes:
   light:
     colors:

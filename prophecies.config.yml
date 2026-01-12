@@ -1,7 +1,12 @@
 content:
   git:
     repo: https://github.com/life-and-dev/prophecies
-siteName: 'Prophecies of God'
+features:
+  bibleTooltips: true
+  sourceEdit: true
+site:
+  canonical: https://prophecies.ofgod.info
+  name: Prophecies of God
 themes:
   light:
     colors:
